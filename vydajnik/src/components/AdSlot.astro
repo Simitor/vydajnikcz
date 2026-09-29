@@ -1,0 +1,69 @@
+---
+import { adsConfig, type AdPlacement } from '../config/ads.config';
+interface Props { placement: AdPlacement; class?: string; }
+const { placement, class: className = '' } = Astro.props;
+const config = adsConfig[placement];
+const style = `--ad-desktop-height:${config.desktopMinHeight}px;--ad-mobile-height:${config.mobileMinHeight}px`;
+---
+<aside hidden class:list={['ad-slot', config.mobileOnly && 'ad-mobile-only', config.desktopOnly && 'ad-desktop-only', className]} style={style} aria-label="Reklama" data-ad-placement={placement} data-ad-provider={config.provider} data-ad-format={config.format} data-ad-variant={config.variant ?? 'control'}>
+	<span class="ad-label">Reklama</span>
+	<div class="ad-slot-content" data-ad-unit></div>
+	{placement === 'sticky-mobile' && <button class="ad-close" type="button" aria-label="Zavřít reklamu">×</button>}
+</aside>
+
+<style>
+	.ad-slot[hidden]{display:none}
+	.ad-slot{min-height:var(--ad-desktop-height);width:100%;display:grid;place-items:center;position:relative;margin:24px auto;padding:8px;border:1px solid #e8ebf0;background:#fff;overflow:hidden}
+	.ad-label{position:absolute;top:5px;left:8px;color:#929ba7;font:8px Arial,sans-serif;letter-spacing:.04em}
+	.ad-slot-content{width:100%;min-height:inherit;display:grid;place-items:center}
+	.ad-slot[data-ad-provider="adsense"] .ad-slot-content:empty::after{content:"";display:block}
+	.ad-slot[data-ad-placement="sticky-mobile"]{display:none}
+	@media(max-width:640px){.ad-slot{min-height:var(--ad-mobile-height);margin:16px auto}.ad-mobile-only{display:grid}.ad-desktop-only{display:none}.ad-slot[data-ad-placement="sticky-mobile"]{position:fixed;z-index:12;display:grid;left:0;right:0;bottom:0;max-width:100%;margin:0;background:white;box-shadow:0 -3px 18px #1b2d4515}.ad-close{position:absolute;top:5px;right:8px;border:0;background:white;color:#637087;font-size:18px;cursor:pointer}}
+	@media(min-width:641px){.ad-mobile-only{display:none}}
+</style>
+
+<script>
+	// A publisher integration can hydrate data-ad-unit after consent. Count a visible impression only after fill.
+	const consent = () => { try { return JSON.parse(localStorage.getItem('vydajnik-consent-v1') || '{}'); } catch { return {}; } };
+	const loadGoogleScript = (src: string, marker: string) => new Promise<void>((resolve,reject) => {
+		const current=document.querySelector<HTMLScriptElement>(`script[data-${marker}]`);if(current){current.addEventListener('load',()=>resolve(),{once:true});if((window as any)[marker==='adsense'?'adsbygoogle':'googletag'])resolve();return;}
+		const script=document.createElement('script');script.async=true;script.src=src;script.crossOrigin='anonymous';script.dataset[marker]= 'true';script.onload=()=>resolve();script.onerror=()=>reject(new Error('Ad provider failed to load'));document.head.append(script);
+	});
+	const observe = (slot: HTMLElement) => {
+		const markImpression=()=>{
+			if (!slot.querySelector('iframe')) return;
+			slot.dataset.adFilled='true';
+			const io = new IntersectionObserver((entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					window.dispatchEvent(new CustomEvent('vydajnik:ad-impression', { detail: { placement: slot.dataset.adPlacement, variant: slot.dataset.adVariant } }));
+					io.disconnect(); watcher.disconnect();
+				}
+			}, { threshold: 0.5 });
+			io.observe(slot);
+		};
+		const watcher = new MutationObserver(markImpression);
+		watcher.observe(slot, { childList: true, subtree: true });
+		markImpression();
+	};
+	const initialized=new WeakSet<HTMLElement>();
+	const hasTcfConsent=()=>new Promise<boolean>((resolve)=>{const api=(window as any).__tcfapi;if(typeof api!=='function'){resolve(false);return;}api('addEventListener',2,(data:any,success:boolean)=>{if(!success){resolve(false);return;}const loaded=data?.cmpStatus==='loaded'&&(data?.eventStatus==='tcloaded'||data?.eventStatus==='useractioncomplete');resolve(Boolean(loaded&&data?.tcString));});});
+	const initialize=async(slot:HTMLElement)=>{
+		if(initialized.has(slot)||!consent().advertising)return;
+		if(slot.dataset.adPlacement==='sticky-mobile'&&sessionStorage.getItem('vydajnik-sticky-ad-dismissed')==='1')return;
+		try{const response=await fetch(`/api/ads?placement=${encodeURIComponent(slot.dataset.adPlacement||'')}`);if(!response.ok)return;const config=await response.json();if(!config.enabled)return;if((config.provider==='adsense'||config.provider==='gam')&&!await hasTcfConsent())return;initialized.add(slot);
+			slot.hidden=false;slot.dataset.adProvider=config.provider;const variants=String(config.variant||'control').split('|').map((value:string)=>value.trim()).filter(Boolean);const variantKey=`vydajnik-ad-variant-${slot.dataset.adPlacement}`;const variant=variants.length>1?(sessionStorage.getItem(variantKey)||variants[Math.floor(Math.random()*variants.length)]):variants[0];if(variants.length>1)sessionStorage.setItem(variantKey,variant);slot.dataset.adVariant=variant;const unit=slot.querySelector<HTMLElement>('[data-ad-unit]')!;
+			const render=async()=>{
+				if(config.provider==='adsense'&&config.adsenseClient){await loadGoogleScript(`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(config.adsenseClient)}`,'adsense');const ad=document.createElement('ins');ad.className='adsbygoogle';ad.style.display='block';ad.dataset.adClient=config.adsenseClient;ad.dataset.adSlot=config.unit_id;ad.dataset.adFormat='auto';ad.dataset.fullWidthResponsive='true';unit.append(ad);((window as any).adsbygoogle=(window as any).adsbygoogle||[]).push({});}
+				else if(config.provider==='gam'){await loadGoogleScript('https://securepubads.g.doubleclick.net/tag/js/gpt.js','googletag');const gt=(window as any).googletag;gt.cmd=gt.cmd||[];unit.id||=`ad-${config.placement}`;gt.cmd.push(()=>{const ad=gt.defineSlot(String(config.unit_id),[[300,250],[336,280],[728,90],[320,100]],unit.id);if(ad){ad.addService(gt.pubads());gt.pubads().enableSingleRequest();gt.enableServices();gt.display(unit.id);}});}
+				else if(config.provider==='custom')window.dispatchEvent(new CustomEvent('vydajnik:ad-slot-ready',{detail:{slot,config}}));
+				observe(slot);
+			};
+			const lazy=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)){lazy.disconnect();void render();}},{rootMargin:'250px 0px'});lazy.observe(slot);
+		}catch{slot.hidden=true;initialized.delete(slot);}
+	};
+	document.querySelectorAll<HTMLElement>('[data-ad-placement]').forEach((slot) => {
+		void initialize(slot);
+		window.addEventListener('vydajnik:consent-updated', () => void initialize(slot));
+	});
+	document.querySelectorAll<HTMLButtonElement>('.ad-close').forEach(button=>button.addEventListener('click',()=>{const slot=button.closest<HTMLElement>('[data-ad-placement]');if(slot){sessionStorage.setItem('vydajnik-sticky-ad-dismissed','1');slot.hidden=true;}}));
+</script>

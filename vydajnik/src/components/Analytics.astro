@@ -1,0 +1,27 @@
+<script>
+	import { initializeAnalytics, track } from '../lib/analytics-client';
+
+	const bind = () => {
+		initializeAnalytics();
+		let started = new Set<string>();
+		let timers = new Map<string, number>();
+		document.querySelectorAll<HTMLElement>('[data-tab]').forEach((tab) => tab.addEventListener('click', () => {
+			const calculator = tab.dataset.tab || 'unknown';
+			if (!started.has(calculator)) { started.add(calculator); void track('calculator_started', calculator); }
+		}));
+		document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('#income-amount,#income-range,#expense-rate,#km-year,#km-range,#consumption,#fuel-price,#service,#insurance,#depreciation').forEach((input) => {
+			const calculator = input.id.includes('income') || input.id.includes('expense') ? 'income' : 'auto';
+			input.addEventListener('input', () => {
+				if (!started.has(calculator)) { started.add(calculator); void track('calculator_started', calculator); }
+				window.clearTimeout(timers.get(calculator));
+				timers.set(calculator, window.setTimeout(() => void track('calculator_completed', calculator), 1500));
+			});
+		});
+		document.querySelectorAll<HTMLFormElement>('[data-lead-form]').forEach((form) => {
+			form.addEventListener('focusin', () => void track('lead_form_started', form.dataset.calculator, {}, 'analytics'), { once: true });
+		});
+		window.addEventListener('vydajnik:lead-submitted', (event) => { const detail=(event as CustomEvent).detail; void track('lead_submitted', detail?.calculator, {}, 'analytics'); });
+	};
+	bind();
+	window.addEventListener('vydajnik:consent-updated', bind);
+</script>

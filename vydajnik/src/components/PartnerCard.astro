@@ -1,0 +1,24 @@
+---
+import type { ProductOffer } from '../types/monetization';
+interface Props { offer: ProductOffer; calculator: string; }
+const { offer, calculator } = Astro.props;
+const price = typeof offer.priceAmount === 'number'
+	? `${Math.round(offer.priceAmount).toLocaleString('cs-CZ')} ${offer.priceCurrency ?? 'Kč'}${offer.pricePeriod === 'month' ? ' / měsíc' : offer.pricePeriod === 'year' ? ' / rok' : ''}`
+	: 'Cena se zobrazí u partnera';
+---
+<article class="partner-card" data-partner-card data-sponsored={offer.sponsored ? 'true' : 'false'}>
+	<div class="partner-card-head"><span class="partner-mark">{offer.providerName.slice(0, 1).toUpperCase()}</span><div><span class="partner-label">{offer.sponsored ? 'Sponzorovaná partnerská nabídka' : 'Partnerská nabídka'}</span><h3>{offer.providerName}</h3></div></div>
+	<p class="partner-product">{offer.productName}</p>
+	<strong class="partner-price">{offer.indicativePrice ? 'Orientačně ' : ''}{price}</strong>
+	{offer.updatedAt && <p class="partner-updated">Cena aktualizována {new Date(offer.updatedAt).toLocaleDateString('cs-CZ')}</p>}
+	{offer.excess && <p class="partner-detail">Spoluúčast: {offer.excess}</p>}
+	{offer.coverage?.length && <ul>{offer.coverage.map((coverage) => <li>{coverage}</li>)}</ul>}
+	<a class="partner-cta" href={`/go/${encodeURIComponent(offer.partnerId)}/${encodeURIComponent(offer.id)}?calculator=${encodeURIComponent(calculator)}`} rel="sponsored nofollow" data-partner-click data-partner={offer.partnerId} data-product={offer.id}>Zobrazit nabídku <span>↗</span></a>
+	<p class="partner-disclosure">Výdajník může získat odměnu, pokud přejdete k partnerovi. Placené umístění neznamená, že jde o nejlepší nabídku.</p>
+</article>
+
+<style>
+	.partner-card{background:#fff;border:1px solid #e4e9ef;border-radius:5px;padding:19px;display:flex;flex-direction:column;min-height:235px;color:#27374d}
+	.partner-card-head{display:flex;align-items:center;gap:10px}.partner-mark{width:31px;height:31px;display:grid;place-items:center;border-radius:50%;background:#eef3fc;color:#4269a8;font-weight:700;font-size:12px}
+	.partner-label{font:8px Arial,sans-serif;letter-spacing:.04em;color:#79879a}.partner-card h3{font-size:13px;margin:3px 0 0}.partner-product{font-size:10px;color:#758295;margin:14px 0 8px}.partner-price{font-size:19px;letter-spacing:-.4px}.partner-updated,.partner-detail{font-size:8px;color:#8b96a4;margin:6px 0}.partner-card ul{font-size:9px;color:#657388;padding-left:16px;line-height:1.7}.partner-cta{padding:10px 12px;background:#2864dc;color:white;border-radius:3px;font-size:10px;font-weight:600;display:flex;justify-content:space-between;margin-top:auto}.partner-disclosure{font-size:7px;line-height:1.45;color:#9aa3af;margin:9px 0 0}
+</style>

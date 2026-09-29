@@ -1,0 +1,29 @@
+<aside class="consent-banner" id="consent-banner" hidden aria-labelledby="consent-title">
+	<div class="consent-inner"><div><span class="consent-eyebrow">VAŠE SOUKROMÍ</span><h2 id="consent-title">Vy rozhodujete o cookies.</h2><p>Nezbytné cookies zajišťují fungování webu. Analytiku a reklamu zapneme jen s vaším souhlasem. Volbu můžete kdykoliv změnit.</p><a href="/ochrana-soukromi/">Zásady ochrany soukromí</a></div><div class="consent-actions"><button data-consent-all class="consent-accept">Přijmout vše</button><button data-consent-reject class="consent-reject">Odmítnout volitelné</button><button data-consent-settings class="consent-settings">Nastavit</button></div></div>
+	<div class="consent-options" hidden><label><input type="checkbox" checked disabled/> Nezbytné <small>Vždy aktivní</small></label><label><input type="checkbox" data-category="analytics"/> Analytické <small>Pomáhají zlepšovat kalkulačky</small></label><label><input type="checkbox" data-category="advertising"/> Reklamní <small>Umožní zobrazovat relevantní reklamu</small></label><label><input type="checkbox" data-category="marketing"/> Partnerské měření <small>Měří prokliky na partnerské nabídky</small></label><button data-consent-save class="consent-accept">Uložit nastavení</button></div>
+</aside>
+<button class="consent-reopen" type="button" aria-label="Nastavení cookies">Cookies</button>
+<script>
+	type Consent = { necessary: true; analytics: boolean; advertising: boolean; marketing: boolean; updatedAt: string };
+	const key = 'vydajnik-consent-v1';
+	const banner = document.querySelector<HTMLElement>('#consent-banner')!;
+	const options = banner.querySelector<HTMLElement>('.consent-options')!;
+	const read = (): Consent | null => { try { const value = JSON.parse(localStorage.getItem(key) || 'null'); return value?.necessary === true ? value : null; } catch { return null; } };
+	const save = (value: Omit<Consent, 'updatedAt'>) => {
+		const consent: Consent = { ...value, updatedAt: new Date().toISOString() };
+		localStorage.setItem(key, JSON.stringify(consent));
+		banner.hidden = true; options.hidden = true;
+		window.dispatchEvent(new CustomEvent('vydajnik:consent-updated', { detail: consent }));
+	};
+	const show = () => { banner.hidden = false; };
+	if (!read()) show();
+	banner.querySelector('[data-consent-all]')?.addEventListener('click', () => save({ necessary: true, analytics: true, advertising: true, marketing: true }));
+	banner.querySelector('[data-consent-reject]')?.addEventListener('click', () => save({ necessary: true, analytics: false, advertising: false, marketing: false }));
+	banner.querySelector('[data-consent-settings]')?.addEventListener('click', () => { options.hidden = !options.hidden; const current = read(); banner.querySelectorAll<HTMLInputElement>('[data-category]').forEach(input => input.checked = current?.[input.dataset.category as 'analytics'|'advertising'|'marketing'] ?? false); });
+	banner.querySelector('[data-consent-save]')?.addEventListener('click', () => { const value = { necessary: true as const, analytics: false, advertising: false, marketing: false }; banner.querySelectorAll<HTMLInputElement>('[data-category]').forEach(input => { value[input.dataset.category as 'analytics'|'advertising'|'marketing'] = input.checked; }); save(value); });
+	document.querySelector('.consent-reopen')?.addEventListener('click', show);
+</script>
+
+<style>
+	.consent-banner{position:fixed;z-index:30;inset:auto 18px 18px;max-width:760px;margin-left:auto;background:#fff;border:1px solid #dce2eb;border-radius:6px;box-shadow:0 18px 60px #14294326;padding:19px;color:#27374d}.consent-banner[hidden],.consent-options[hidden]{display:none}.consent-inner{display:flex;justify-content:space-between;gap:22px;align-items:center}.consent-eyebrow{font:8px Arial,sans-serif;letter-spacing:.12em;color:#76849a}.consent-banner h2{font-size:16px;margin:7px 0}.consent-banner p{max-width:470px;font-size:9px;line-height:1.65;color:#778497;margin:0 0 6px}.consent-banner a{font-size:8px;color:#2864dc}.consent-actions{display:grid;min-width:150px;gap:7px}.consent-actions button,.consent-options button{height:34px;border-radius:3px;padding:0 11px;font-size:9px;font-weight:600;cursor:pointer}.consent-accept{background:#2864dc;border:1px solid #2864dc;color:#fff}.consent-reject,.consent-settings{background:white;border:1px solid #dce2eb;color:#46556b}.consent-options{border-top:1px solid #edf0f3;margin-top:15px;padding-top:13px;display:grid;grid-template-columns:1fr 1fr;gap:10px}.consent-options label{font-size:9px;color:#4d5b70}.consent-options small{display:block;margin-left:19px;color:#8a95a4;font-size:8px}.consent-options input{accent-color:#2864dc}.consent-options button{grid-column:1/-1}.consent-reopen{position:fixed;z-index:20;left:12px;bottom:12px;background:#fff;border:1px solid #e0e5ed;border-radius:20px;padding:7px 10px;color:#69778a;font-size:8px;cursor:pointer;box-shadow:0 2px 8px #23344a12}.consent-banner:not([hidden])~.consent-reopen{display:none}@media(max-width:600px){.consent-banner{inset:auto 8px 8px;padding:15px}.consent-inner{display:block}.consent-actions{grid-template-columns:1fr 1fr;margin-top:13px}.consent-actions button:first-child{grid-column:1/-1}.consent-options{grid-template-columns:1fr}}
+</style>
