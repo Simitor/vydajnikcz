@@ -15,7 +15,17 @@
 
 Administrace odesílá partnery, produkty a reklamní pozice do `/api/admin/config`, příjmy do `/api/admin/revenue` a reklamní výkazy do `/api/admin/ad-report`. Export kontaktů se stahuje z `/api/admin/leads` s autorizační hlavičkou. Při ukládání jsou tlačítka dočasně vypnutá; chyby ponechávají zadané hodnoty. Po finančním zápisu se obnoví přehled. Neúspěšné obnovení přehledu nezmění potvrzené uložení na chybu ukládání.
 
-Ochrana tlačítka brání opakovanému požadavku během ukládání. Deduplikace finančních referencí v databázi a seznamy s předvyplněnou editací patří do navazujících bodů A3 a A2. Stejný příjem z reklamního výkazu nevkládejte ještě jednou přes obecný formulář příjmů.
+Ochrana tlačítka brání opakovanému požadavku během ukládání. Deduplikace finančních referencí v databázi patří do navazujícího bodu A3. Stejný příjem z reklamního výkazu nevkládejte ještě jednou přes obecný formulář příjmů.
+
+## Správa záznamů A2
+
+Na `/admin/monetizace/` jsou po přihlášení seznamy partnerů, nabídek a poptávek s hledáním, filtry a stránkováním po 25 záznamech. Data načítá `/api/admin/records` pouze s admin tokenem a bez ukládání do mezipaměti. Odhlášení odstraní seznamy, detail poptávky, hledané výrazy a hodnoty editorů; opožděné odpovědi je znovu nezobrazí.
+
+- **Upravit** otevře uložený záznam a předvyplní formulář. ID partnera, ID nabídky a její partner jsou během úpravy uzamčené. **Nový partner / Nová nabídka** vyčistí formulář pro nový záznam. Nové ID, které už existuje, vrátí chybu místo přepsání. Úprava neexistujícího záznamu jej znovu nevytvoří. Nepřístupná pole regionů a pojistného krytí se při běžné editaci zachovají.
+- **Vypnout / Aktivovat** mění pouze aktivní stav. Vypnutí partnera skryje všechny jeho nabídky; zapnutí obnoví jen ty, které samy zůstaly aktivní. Data a historie se nemažou. Vypnutý partner nebo nabídka nemají funkční veřejný partnerský přesměrovací odkaz. Úprava ceny nebo názvu firmy se projeví v dalším načtení veřejného katalogu.
+- **Otevřít detail** poptávky ukáže kontakt, firmu, předmět zájmu, souhlas, zdroj a další uložené údaje. Uložením stavu a případné potvrzené odměny se obnoví detail, seznam i přehled stavů. Ostatní údaje poptávky se nemění. CSV export z A1 zůstává dostupný.
+
+A2 používá stávající tabulky D1; nevyžaduje novou migraci ani nové proměnné prostředí. `npm test` navíc ověřuje skutečné SQL seznamů a filtrů, složenou identitu nabídek, editaci bez ztráty dalších údajů, konflikty ID, aktivaci a veřejné chování i změny stavu poptávky. Testovací databáze je oddělená od provozních dat.
 
 ## Nasazení na Cloudflare Pages
 

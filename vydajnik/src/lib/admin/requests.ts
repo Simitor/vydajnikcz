@@ -1,4 +1,4 @@
-export type AdminFormKind = 'partner' | 'product' | 'placement' | 'revenue' | 'ad-report';
+export type AdminFormKind = 'partner' | 'product' | 'placement' | 'revenue' | 'ad-report' | 'lead';
 
 export interface AdminSubmission {
 	endpoint: string;
@@ -74,6 +74,12 @@ export const buildAdminSubmission = (kind: AdminFormKind, data: FormData): Admin
 		return {
 			endpoint: '/api/admin/config', refreshMetrics: false, successMessage: 'Reklamní pozice uložena.',
 			payload: { action: kind, placement: text(data, 'placement'), provider: text(data, 'provider'), unitId: text(data, 'unitId'), variant: text(data, 'variant'), enabled: checked(data, 'enabled') },
+		};
+	}
+	if (kind === 'lead') {
+		return {
+			endpoint: '/api/admin/leads', refreshMetrics: true, successMessage: 'Stav poptávky uložen.',
+			payload: { id: requiredText(data, 'id', 'Poptávka'), status: requiredText(data, 'status', 'Stav'), payout: numeric(data, 'payout', 'Potvrzená odměna', true) },
 		};
 	}
 	if (kind === 'revenue') {

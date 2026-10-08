@@ -1,0 +1,85 @@
+---
+import { categoryLabels, leadStatusLabels } from '../lib/admin/record-model';
+const sections = [
+	{ kind: 'partners', title: 'Seznam partnerů', search: 'Název firmy nebo ID', add: 'Nový partner' },
+	{ kind: 'products', title: 'Seznam nabídek', search: 'Název nabídky, partner nebo ID', add: 'Nová nabídka' },
+	{ kind: 'leads', title: 'Poptávky', search: 'Jméno, firma, e-mail nebo telefon', add: '' },
+];
+---
+<nav class="admin-record-nav" aria-label="Části administrace">
+	<a href="#partners-list">Partneři</a><a href="#products-list">Nabídky</a><a href="#leads-list">Poptávky</a><a href="#admin-editors">Formuláře a výkazy</a>
+</nav>
+{sections.map(section => <section class="admin-panel admin-record-section" id={`${section.kind}-list`} data-record-section={section.kind}>
+	<div class="record-section-heading"><h2>{section.title}</h2>{section.add && <button type="button" class="record-button" data-new-record={section.kind}>{section.add}</button>}</div>
+	<form class="record-filters" data-record-filters={section.kind}>
+		<label>Hledat<input name="q" type="search" maxlength="160" placeholder={section.search} /></label>
+		{section.kind !== 'leads' && <label>Stav<select name="active"><option value="">Všechny stavy</option><option value="1">Aktivní</option><option value="0">Vypnuté</option></select></label>}
+		{section.kind !== 'leads' && <label>Kategorie<select name="category"><option value="">Všechny kategorie</option>{Object.entries(categoryLabels).map(([value, label]) => <option value={value}>{label}</option>)}</select></label>}
+		{section.kind === 'products' && <label>Partner<select name="partnerId" data-partner-filter><option value="">Všichni partneři</option></select></label>}
+		{section.kind === 'leads' && <label>Stav<select name="status"><option value="">Všechny stavy</option>{Object.entries(leadStatusLabels).map(([value, label]) => <option value={value}>{label}</option>)}</select></label>}
+		<div class="record-filter-actions"><button type="submit" class="record-button">Hledat</button><button type="button" class="record-button" data-clear-filters>Vymazat filtry</button></div>
+	</form>
+	<p class="config-message" data-record-message={section.kind} aria-live="polite"></p>
+	<div class="record-results" id={`${section.kind}-results`} data-record-results={section.kind}></div>
+	<div class="record-pagination"><span data-record-summary={section.kind} aria-live="polite"></span><div><button type="button" class="record-button" data-record-prev={section.kind} disabled aria-controls={`${section.kind}-results`}>Předchozí</button><button type="button" class="record-button" data-record-next={section.kind} disabled aria-controls={`${section.kind}-results`}>Další</button></div></div>
+	{section.kind === 'leads' && <section class="lead-detail" data-lead-detail hidden aria-labelledby="lead-detail-title">
+		<div class="record-section-heading"><h3 id="lead-detail-title" data-lead-title>Detail poptávky</h3><button type="button" class="record-button" data-close-lead>Zavřít detail</button></div>
+		<dl class="lead-fields" data-lead-fields></dl>
+		<div data-lead-extra></div>
+		<form class="lead-status-form" data-lead-form>
+			<input type="hidden" name="id" />
+			<label>Stav poptávky<select name="status">{Object.entries(leadStatusLabels).map(([value, label]) => <option value={value}>{label}</option>)}</select></label>
+			<label>Potvrzená odměna v Kč<input name="payout" type="number" min="0" max="100000000" step="0.01" /></label>
+			<button type="submit" class="button button-primary">Uložit stav poptávky</button>
+			<span class="config-message" aria-live="polite"></span>
+		</form>
+	</section>}
+</section>)}
+<datalist id="admin-partners"></datalist>
+
+<style is:global>
+	.admin-page .admin-record-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+	.admin-page .admin-record-nav a { padding: 9px 12px; border: 1px solid #dce3ee; border-radius: 5px; background: white; font-size: 12px; }
+	.admin-page .admin-record-section { margin-bottom: 18px; padding: 22px; scroll-margin-top: 95px; }
+	.admin-page .record-section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+	.admin-page .record-section-heading h2, .admin-page .record-section-heading h3 { margin: 0; min-width: 0; overflow-wrap: anywhere; font-size: 16px; }
+	.admin-page .record-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+	.admin-page .record-filters label { flex: 1 1 140px; min-width: 0; font-size: 12px; color: #59677a; }
+	.admin-page .record-filters label:first-child { flex: 2 1 220px; }
+	.admin-page .record-filters input, .admin-page .record-filters select, .admin-page .lead-status-form input, .admin-page .lead-status-form select {
+		display: block; margin-top: 5px; border: 1px solid #dfe4eb; border-radius: 4px; padding: 0 10px; height: 38px; width: 100%; background: white; font-size: 12px;
+	}
+	.admin-page .record-button { min-height: 36px; padding: 7px 12px; border: 1px solid #dce3ee; border-radius: 4px; background: white; color: #2857a0; font-size: 12px; cursor: pointer; }
+	.admin-page .record-button:hover:not(:disabled) { background: #f0f5ff; }
+	.admin-page .record-filter-actions, .admin-page .record-actions, .admin-page .record-pagination > div { display: flex; flex-wrap: wrap; gap: 8px; }
+	.admin-page .record-results { margin-top: 10px; }
+	.admin-page .record-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 0; border-bottom: 1px solid #e7ebf1; }
+	.admin-page .record-copy { min-width: 0; flex: 1; }
+	.admin-page .record-title { font-size: 14px; display: block; overflow-wrap: anywhere; }
+	.admin-page .record-secondary { font-size: 12px; line-height: 1.7; color: #6d7a8d; margin: 5px 0 0; overflow-wrap: anywhere; }
+	.admin-page .record-badge { display: inline-block; font-size: 11px; padding: 3px 7px; margin: 7px 6px 0 0; background: #edf1f6; border-radius: 4px; color: #57667b; }
+	.admin-page .record-badge[data-active=true] { color: #16704b; background: #eaf6ef; }
+	.admin-page .record-empty { color: #6d7a8d; font-size: 13px; padding: 18px 0; }
+	.admin-page .record-pagination { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 16px; font-size: 12px; color: #6d7a8d; }
+	.admin-page .lead-detail { margin-top: 24px; padding: 20px; border: 1px solid #cbdaf4; border-radius: 5px; background: #f8faff; scroll-margin-top: 95px; }
+	.admin-page .lead-detail[hidden] { display: none; }
+	.admin-page .lead-fields { display: grid; grid-template-columns: minmax(100px, .4fr) minmax(0, 1fr); gap: 8px 16px; font-size: 12px; line-height: 1.7; }
+	.admin-page .lead-fields dt { color: #6d7a8d; }
+	.admin-page .lead-fields dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+	.admin-page .lead-status-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+	.admin-page .lead-status-form label { font-size: 12px; color: #59677a; min-width: 0; }
+	.admin-page .lead-status-form button { grid-column: 1 / -1; width: max-content; border: 0; cursor: pointer; }
+	.admin-page .lead-detail details { font-size: 12px; margin-top: 16px; }
+	.admin-page .admin-editor-heading { grid-column: 1 / -1; font-size: 12px; margin: 0; color: #2857a0; }
+	.admin-page input[readonly] { background: #f0f3f7; color: #59677a; }
+	.admin-page :is(button, input, select, a):focus-visible { outline: 2px solid #2864dc; outline-offset: 3px; }
+	@media (max-width: 640px) {
+		.admin-page .admin-record-section { padding: 16px; }
+		.admin-page .record-row { flex-direction: column; align-items: stretch; gap: 8px; }
+		.admin-page .record-pagination { align-items: start; flex-direction: column; }
+		.admin-page .lead-detail { padding: 14px; }
+		.admin-page .lead-fields, .admin-page .lead-status-form { grid-template-columns: 1fr; }
+		.admin-page .lead-fields { gap: 2px; }
+		.admin-page .lead-fields dd { margin-bottom: 10px; }
+	}
+</style>

@@ -1,5 +1,7 @@
 import { buildAdminSubmission } from './requests';
 import type { AdminFormKind } from './requests';
+import { initRecords } from './records';
+import { leadStatusLabels } from './record-model';
 
 interface Metrics {
 	generatedAt: string;
@@ -62,12 +64,14 @@ export const initAdmin = () => {
 	const pending = new Set<HTMLFormElement>();
 	let sessionVersion = 0;
 	let loginPending = false;
+	let records: ReturnType<typeof initRecords>;
 
 	const invalidateSession = (error: unknown) => {
 		if (error instanceof AdminRequestError && [401, 403].includes(error.status)) {
 			sessionVersion++;
 			sessionStorage.removeItem(tokenKey);
 			dashboard.hidden = true;
+			records?.clear();
 			message(msg, error.message, 'error');
 		}
 	};
@@ -112,12 +116,19 @@ export const initAdmin = () => {
 		setText('[data-ad-ctr]', Number(data.ads.ctr).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' %');
 		setText('[data-ad-variants]', data.adVariants.length ? data.adVariants.map(row => `${row.placement} · ${row.variant}: ${row.impressions}`).join(' / ') : 'Bez A/B měření');
 		rows('[data-funnel]', data.funnel.map(row => ({ label: row.name, value: row.count.toLocaleString('cs-CZ') })), 'Zatím nejsou zaznamenané události.', '');
-		rows('[data-leads]', data.leads.map(row => ({ label: row.status, value: String(row.count) })), 'Bez leadů.');
+		rows('[data-leads]', data.leads.map(row => ({ label: leadStatusLabels[row.status] || row.status, value: String(row.count) })), 'Bez poptávek.');
 		rows('[data-affiliate]', data.affiliate.map(row => ({ label: `${row.partner_id} / ${row.product_id}`, value: String(row.clicks) })), 'Bez prokliků.');
 		sessionStorage.setItem(tokenKey, token);
 		dashboard.hidden = false;
 		message(msg, `Aktualizováno ${new Date(data.generatedAt).toLocaleString('cs-CZ')}`, 'success');
 	};
+	records = initRecords({
+		getSession: () => { const token = sessionStorage.getItem(tokenKey); return token ? { token, version: sessionVersion } : null; },
+		request: async (endpoint, token, init = {}) => readJson(await requestAdmin(endpoint, token, init), init.method === 'POST'),
+		formatError: errorMessage,
+		onAuthError: invalidateSession,
+		globalMessage: (text, state) => message(msg, text, state),
+	});
 
 	const bindForm = (form: HTMLFormElement, kind: AdminFormKind) => {
 		const output = form.querySelector<HTMLElement>('.config-message')!;
@@ -127,7 +138,7 @@ export const initAdmin = () => {
 			const token = sessionStorage.getItem(tokenKey);
 			if (!token) { message(msg, 'Nejprve se přihlaste tokenem správce.', 'error'); dashboard.hidden = true; return; }
 			let submission;
-			try { submission = buildAdminSubmission(kind, new FormData(form)); }
+			try { submission = buildAdminSubmission(kind, new FormData(form)); records.prepareSubmission(kind, submission.payload); }
 			catch (error) { message(output, errorMessage(error), 'error'); return; }
 			const version = sessionVersion;
 			const buttons = [...form.querySelectorAll<HTMLButtonElement>('button')].map(button => ({ button, disabled: button.disabled }));
@@ -140,11 +151,12 @@ export const initAdmin = () => {
 				if (result.ok !== true) throw new AdminRequestError('Server nepotvrdil uložení.', response.status, true);
 				if (version !== sessionVersion) return;
 				message(output, submission.successMessage, 'success');
-				if (submission.refreshMetrics) {
-					try { await render(token, version); }
+				if (submission.refreshMetrics || kind === 'partner' || kind === 'product') {
+					try { await Promise.all([records.afterSave(kind, submission.payload), ...(submission.refreshMetrics ? [render(token, version)] : [])]); }
 					catch (error) {
 						if (version !== sessionVersion) return;
-						message(output, `${submission.successMessage} Přehled se nepodařilo obnovit. Záznam znovu neodesílejte; obnovte stránku.`, 'warning');
+						const view = kind === 'partner' || kind === 'product' ? 'Seznam' : kind === 'lead' ? 'Seznam nebo přehled' : 'Přehled';
+						message(output, `${submission.successMessage} ${view} se nepodařilo obnovit. Záznam znovu neodesílejte; obnovte stránku.`, 'warning');
 						invalidateSession(error);
 						if (error instanceof AdminRequestError && [401, 403].includes(error.status)) {
 							message(msg, `${submission.successMessage} ${error.message} Záznam znovu neodesílejte.`, 'warning');
@@ -162,6 +174,7 @@ export const initAdmin = () => {
 	document.querySelectorAll<HTMLFormElement>('[data-admin-config]').forEach(form => bindForm(form, form.dataset.action as AdminFormKind));
 	bindForm(document.querySelector<HTMLFormElement>('[data-revenue-form]')!, 'revenue');
 	bindForm(document.querySelector<HTMLFormElement>('[data-ad-report]')!, 'ad-report');
+	bindForm(document.querySelector<HTMLFormElement>('[data-lead-form]')!, 'lead');
 
 	const exportButton = document.querySelector<HTMLButtonElement>('[data-export-leads]')!;
 	const exportMessage = document.querySelector<HTMLElement>('[data-export-message]')!;
@@ -197,12 +210,13 @@ export const initAdmin = () => {
 		const button = login.querySelector<HTMLButtonElement>('button[type=submit], button:not([type])')!;
 		loginPending = true; button.disabled = true; dashboard.hidden = true; sessionStorage.removeItem(tokenKey);
 		message(msg, 'Načítám…', 'busy');
-		try { await render(token, version); if (version === sessionVersion) login.reset(); }
+		try { await render(token, version); if (version === sessionVersion) { login.reset(); void records.loadAll(); } }
 		catch (error) { if (version === sessionVersion) { message(msg, errorMessage(error), 'error'); invalidateSession(error); } }
 		finally { loginPending = false; button.disabled = false; }
 	});
 	document.querySelector('.admin-logout')?.addEventListener('click', () => {
 		sessionVersion++; sessionStorage.removeItem(tokenKey); dashboard.hidden = true; login.reset();
+		records.clear();
 		dashboard.querySelectorAll<HTMLElement>('.config-message').forEach(element => { element.textContent = ''; delete element.dataset.state; });
 		message(msg, 'Odhlášeno.', 'success');
 	});
@@ -210,7 +224,7 @@ export const initAdmin = () => {
 	if (cached) {
 		const version = sessionVersion;
 		message(msg, 'Načítám…', 'busy');
-		void render(cached, version).catch(error => {
+		void render(cached, version).then(() => { if (version === sessionVersion) void records.loadAll(); }).catch(error => {
 			if (version === sessionVersion) { message(msg, errorMessage(error), 'error'); invalidateSession(error); }
 		});
 	}
