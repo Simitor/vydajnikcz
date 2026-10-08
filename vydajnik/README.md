@@ -9,6 +9,14 @@
 - `npm run build`
 - `npm run preview`
 
+## Kontrola administrace A1
+
+`npm test` ověřuje všech pět ukládacích formulářů proti serverovým funkcím a oddělené testovací SQLite databázi. Zahrnuje zachování hodnot po znovuotevření databáze, prázdnou a nulovou cenu, chybné vstupy, odmítnutí nesprávného tokenu a CSV s českými znaky i ochranou proti vzorcům. Testy používají skutečné SQL projektu a nezapisují do Cloudflare D1.
+
+Administrace odesílá partnery, produkty a reklamní pozice do `/api/admin/config`, příjmy do `/api/admin/revenue` a reklamní výkazy do `/api/admin/ad-report`. Export kontaktů se stahuje z `/api/admin/leads` s autorizační hlavičkou. Při ukládání jsou tlačítka dočasně vypnutá; chyby ponechávají zadané hodnoty. Po finančním zápisu se obnoví přehled. Neúspěšné obnovení přehledu nezmění potvrzené uložení na chybu ukládání.
+
+Ochrana tlačítka brání opakovanému požadavku během ukládání. Deduplikace finančních referencí v databázi a seznamy s předvyplněnou editací patří do navazujících bodů A3 a A2. Stejný příjem z reklamního výkazu nevkládejte ještě jednou přes obecný formulář příjmů.
+
 ## Nasazení na Cloudflare Pages
 
 Sestavení vytváří statické stránky v `dist/`; adresář `functions/` dodává API routy. V Cloudflare Pages nastavte build příkaz `npm run build`, výstupní složku `dist` a D1 binding pojmenovaný `DB`. Pro databázi použijte `database/monetization-d1.sql`.

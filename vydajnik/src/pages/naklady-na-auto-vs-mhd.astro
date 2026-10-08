@@ -1,0 +1,83 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import AdSlot from "../components/AdSlot.astro";
+---
+<SiteLayout title="Náklady na auto vs. MHD a carsharing | Výdajník.cz" description="Spočítejte skutečné roční a měsíční náklady na auto včetně amortizace a porovnejte je s MHD a carsharingem.">
+  <Header />
+  <main class="calculator-page">
+    <div class="container">
+      <div class="breadcrumbs"><a href="/">Úvod</a><span>/</span><span>Kalkulačka nákladů na auto</span></div>
+      <div class="calc-heading"><div><span class="eyebrow">KALKULAČKA DOPRAVY</span><h1>Kolik vás opravdu<br /><span>stojí auto?</span></h1><p>Porovnejte všechny náklady na vlastní auto s MHD a carsharingem. Včetně ztráty hodnoty, kterou v běžném rozpočtu často nevidíte.</p></div><div class="privacy-note"><span>◎</span><div><b>Soukromě a bez registrace</b><small>Výpočet probíhá přímo ve vašem prohlížeči.</small></div></div></div>
+      <AdSlot id="car-above-calculator" />
+      <div class="calculator-layout">
+        <section class="input-panel" aria-labelledby="input-title"><div class="panel-heading"><div><span class="eyebrow">VAŠE VSTUPY</span><h2 id="input-title">Nastavte své náklady</h2></div><button type="button" class="reset-button" id="reset-calculator">Obnovit hodnoty</button></div>
+          <p class="input-note"><span>i</span> Počáteční částky jsou pouze ukázkové předpoklady. Nahraďte je vlastními údaji.</p>
+          <fieldset><legend><span class="legend-num">01</span> Auto a jeho používání</legend><div class="field-grid">
+            <label class="field"><span>Pořizovací cena <small>Kč</small></span><input data-field="purchasePrice" type="number" min="0" step="10000" value="650000" /></label>
+            <label class="field"><span>Odhadovaná hodnota na konci <small>Kč</small></span><input data-field="futureValue" type="number" min="0" step="10000" value="300000" /></label>
+            <label class="field"><span>Doba vlastnictví <small>let</small></span><input data-field="years" type="number" min="1" max="30" step="1" value="5" /></label>
+            <label class="field"><span>Roční nájezd <small>km</small></span><input data-field="annualKm" type="number" min="1" step="1000" value="12000" /></label>
+            <label class="field"><span>Průměrná spotřeba <small>l / 100 km</small></span><input data-field="consumption" type="number" min="0" step="0.1" value="6.5" /></label>
+            <label class="field"><span>Cena paliva <small>Kč / l</small></span><input data-field="fuelPrice" type="number" min="0" step="0.1" value="38" /></label>
+          </div></fieldset>
+          <fieldset><legend><span class="legend-num">02</span> Roční provozní náklady</legend><div class="field-grid">
+            <label class="field"><span>Povinné ručení <small>Kč / rok</small></span><input data-field="liability" type="number" min="0" step="500" value="6000" /></label>
+            <label class="field"><span>Havarijní pojištění <small>Kč / rok</small></span><input data-field="comprehensive" type="number" min="0" step="500" value="12000" /></label>
+            <label class="field"><span>Servis a opravy <small>Kč / rok</small></span><input data-field="service" type="number" min="0" step="500" value="10000" /></label>
+            <label class="field"><span>Pneumatiky <small>Kč / rok</small></span><input data-field="tires" type="number" min="0" step="500" value="4000" /></label>
+            <label class="field"><span>Ostatní (STK, známka…) <small>Kč / rok</small></span><input data-field="other" type="number" min="0" step="500" value="5000" /></label>
+          </div></fieldset>
+          <fieldset><legend><span class="legend-num">03</span> Alternativy k autu</legend><div class="field-grid">
+            <label class="field"><span>MHD – měsíční kupón <small>Kč / měsíc</small></span><input data-field="transitMonthly" type="number" min="0" step="100" value="550" /></label>
+            <label class="field"><span>MHD – další výdaje <small>Kč / měsíc</small></span><input data-field="transitOtherMonthly" type="number" min="0" step="100" value="200" /></label>
+            <label class="field"><span>Carsharing – cena za</span><select data-field="shareUnit"><option value="km">kilometr</option><option value="hour">hodinu</option><option value="minute">minutu</option></select></label>
+            <label class="field"><span id="share-units-label">Počet kilometrů <small>měsíčně</small></span><input data-field="shareUnitsMonthly" type="number" min="0" step="10" value="250" /></label>
+            <label class="field"><span>Cena carsharingu <small id="share-rate-unit">Kč / km</small></span><input data-field="shareRate" type="number" min="0" step="0.1" value="8" /></label>
+          </div><p class="field-caption">Ceny MHD, paliva i carsharingu jsou vaše vlastní vstupy. Ověřte tarif platný ve vašem městě.</p></fieldset>
+          <div class="form-error" id="form-error" role="alert" aria-live="polite"></div>
+        </section>
+        <aside class="results-panel" aria-live="polite"><div class="result-top"><span class="eyebrow">VÝSLEDEK VÝPOČTU</span><span class="live-indicator"><i></i> Aktuální</span></div><h2>Vlastní auto vás stojí</h2><div class="result-price" id="car-monthly">— <small>Kč / měsíc</small></div><p class="result-support">v průměru za celkové náklady včetně amortizace</p>
+          <div class="result-divider"></div><div class="result-line"><span>Ročně celkem</span><b id="car-annual">—</b></div><div class="result-line"><span>Celkem za <span id="result-years">—</span> let</span><b id="car-total">—</b></div><div class="result-line"><span>Cena jednoho kilometru</span><b id="car-per-km">—</b></div>
+          <div class="cost-breakdown"><div class="breakdown-title">Z čeho se náklady skládají</div><div class="breakdown-line"><span><i class="dot dot-blue"></i>Palivo</span><b id="fuel-annual">—</b></div><div class="breakdown-line"><span><i class="dot dot-violet"></i>Pojištění a provoz</span><b id="service-annual">—</b></div><div class="breakdown-line"><span><i class="dot dot-green"></i>Ztráta hodnoty</span><b id="depreciation-annual">—</b></div><div class="bar-stack" aria-label="Poměr složek ročních nákladů"><i id="bar-fuel"></i><i id="bar-service"></i><i id="bar-depreciation"></i></div></div>
+          <div class="compare-title">A jak vychází alternativy?</div><div class="compare-row"><span><i class="transport-icon transit-icon">M</i>MHD</span><b id="transit-monthly">—</b><small>/ měsíc</small></div><div class="compare-row"><span><i class="transport-icon share-icon">↗</i>Carsharing</span><b id="sharing-monthly">—</b><small>/ měsíc</small></div>
+          <div class="winner-box" id="winner-box"></div><p class="estimate-disclaimer">Orientační výpočet z vámi zadaných předpokladů. Nezahrnuje například cenu financování, parkování ani mimořádné opravy, pokud je nezadáte výše.</p><AdSlot id="car-below-results" />
+        </aside>
+      </div>
+      <section class="methodology"><div><span class="eyebrow">JAK POČÍTÁME</span><h2>Co zahrnuje skutečná cena auta?</h2><p>Samotná cena paliva ukazuje jen část výdajů. Pro férové srovnání rozpočítáváme také pokles hodnoty vozu během zvoleného období a přičítáme pravidelné provozní náklady.</p></div><div class="formula-card"><b>Roční náklady na auto</b><span>(pořizovací cena − budoucí hodnota) ÷ roky vlastnictví</span><span>+ palivo + pojištění + servis + ostatní roční náklady</span><small>Jde o zjednodušený model. Výsledek závisí na zadaných hodnotách a skutečný prodej vozu může dopadnout jinak.</small></div></section>
+      <section class="faq-section"><span class="eyebrow">ČASTÉ OTÁZKY</span><h2>Na co se často ptáte</h2><details><summary>Co znamená amortizace auta?</summary><p>Amortizace zde znamená odhadovaný pokles hodnoty vozu: rozdíl mezi pořizovací cenou a jeho předpokládanou hodnotou na konci období. Rozpočítáme ho rovnoměrně na roky vlastnictví.</p></details><details><summary>Jsou v kalkulačce použité aktuální ceny?</summary><p>Ne. Ukázkové částky slouží pouze k předvedení kalkulačky. Zadejte ceny ze svého pojištění, vyúčtování nebo tarifu. Výpočet se přepočítává přímo při změně vstupů.</p></details><details><summary>Počítá se také parkování nebo financování?</summary><p>Samostatné pole pro tyto náklady zatím kalkulačka nemá. Zahrňte je do položky „Ostatní“, chcete-li je ve vlastním srovnání zohlednit.</p></details></section>
+      <AdSlot id="car-before-footer" />
+    </div>
+  </main>
+  <Footer />
+</SiteLayout>
+<script>
+  import { calculateCarCosts, type CarInputs } from "../lib/calculators/car-costs";
+  const fields = [...document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]")];
+  const initial = Object.fromEntries(fields.map((field) => [field.dataset.field!, field.value]));
+  const money = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
+  const fmt = (value: number) => `${money.format(Math.round(value))} Kč`;
+  const display = (id: string, value: string) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  function update() {
+    const error = document.getElementById("form-error");
+    const invalid = fields.find((field) => field instanceof HTMLInputElement && (!field.checkValidity() || field.value === ""));
+    if (invalid) { if (error) error.textContent = "Zkontrolujte prosím vyznačené hodnoty. Čísla musí být v povoleném rozsahu."; (invalid as HTMLInputElement).setAttribute("aria-invalid", "true"); return; }
+    fields.forEach((f) => f.removeAttribute("aria-invalid")); if (error) error.textContent = "";
+    const n = (key: string) => Number((document.querySelector(`[data-field="${key}"]`) as HTMLInputElement).value);
+    const shareUnit = (document.querySelector('[data-field="shareUnit"]') as HTMLSelectElement).value as CarInputs["shareUnit"];
+    const input: CarInputs = { purchasePrice:n("purchasePrice"),futureValue:n("futureValue"),years:n("years"),annualKm:n("annualKm"),consumption:n("consumption"),fuelPrice:n("fuelPrice"),liability:n("liability"),comprehensive:n("comprehensive"),service:n("service"),tires:n("tires"),other:n("other"),transitMonthly:n("transitMonthly"),transitOtherMonthly:n("transitOtherMonthly"),shareRate:n("shareRate"),shareUnit,shareUnitsMonthly:n("shareUnitsMonthly") };
+    if (input.futureValue > input.purchasePrice) { if (error) error.textContent = "Budoucí hodnota auta nemůže být vyšší než jeho pořizovací cena."; return; }
+    const r = calculateCarCosts(input);
+    display("car-monthly", `${fmt(r.car.monthly)} / měsíc`); display("car-annual", fmt(r.car.annual)); display("car-total", fmt(r.car.total)); display("result-years", String(input.years)); display("car-per-km", `${money.format(Math.round(r.car.perKm * 100) / 100)} Kč / km`);
+    display("fuel-annual", fmt(r.fuel)); display("service-annual", fmt(r.service)); display("depreciation-annual", fmt(r.depreciation)); display("transit-monthly", fmt(r.transit.monthly)); display("sharing-monthly", fmt(r.sharing.monthly));
+    const denom = r.car.annual || 1; [ ["bar-fuel",r.fuel],["bar-service",r.service],["bar-depreciation",r.depreciation] ].forEach(([id,v]) => { const el=document.getElementById(id as string); if (el) (el as HTMLElement).style.width=`${Math.max(0,Number(v)/denom*100)}%`; });
+    const alternatives = [{ name:"MHD", monthly:r.transit.monthly },{ name:"Carsharing", monthly:r.sharing.monthly }].sort((a,b)=>a.monthly-b.monthly);
+    const winner = document.getElementById("winner-box"); if (winner) { const diff=Math.abs(r.car.monthly-alternatives[0].monthly); winner.innerHTML = r.car.monthly <= alternatives[0].monthly ? "<b>Vlastní auto vychází z těchto vstupů nejlevněji.</b> Náklady alternativ se mohou lišit podle vašeho používání." : `<b>${alternatives[0].name} vychází přibližně o ${fmt(diff)} měsíčně levněji než vlastní auto.</b> Srovnejte také pohodlí a dostupnost.`; }
+  }
+  fields.forEach((field) => field.addEventListener("input", update));
+  document.getElementById("reset-calculator")?.addEventListener("click", () => { fields.forEach((field) => { field.value=initial[field.dataset.field!]; }); update(); });
+  const shareSelect = document.querySelector<HTMLSelectElement>('[data-field="shareUnit"]');
+  shareSelect?.addEventListener("change", () => { const labels={km:["Počet kilometrů","Kč / km"],hour:["Počet hodin","Kč / hodina"],minute:["Počet minut","Kč / minuta"]} as const; const [unit,rate]=labels[shareSelect.value as keyof typeof labels]; const label=document.getElementById("share-units-label"); if(label) label.innerHTML=`${unit} <small>měsíčně</small>`; display("share-rate-unit",rate); update(); });
+  update();
+</script>

@@ -1,11 +1,17 @@
 interface D1 { prepare(sql: string): { bind(...values: unknown[]): { all<T>(): Promise<{ results: T[] }> } }; }
 interface Env { DB?: D1; ADMIN_TOKEN?: string; }
+const csvCell = (value: unknown) => {
+	let text = String(value ?? '');
+	// Quoting alone does not stop Excel from interpreting a cell as a formula.
+	if (typeof value === 'string' && (/^[\t\r\n]/.test(text) || /^[\s\u0000-\u001f]*[=+\-@]/.test(text))) text = `'${text}`;
+	return `"${text.replaceAll('"', '""')}"`;
+};
 export const onRequestGet = async ({ request, env }: { request: Request; env: Env }) => {
 	if(!env.ADMIN_TOKEN||!env.DB)return Response.json({error:'Admin není nakonfigurován.'},{status:503});
 	if(request.headers.get('authorization')!==`Bearer ${env.ADMIN_TOKEN}`)return Response.json({error:'Neautorizováno.'},{status:401});
 	const {results}=await env.DB.prepare('select id,created_at,name,email,phone,calculator,partner_id,lead_type,consent_timestamp,status,payout_amount from monetization_leads order by created_at desc limit 5000').bind().all<Record<string,unknown>>();
-	const csv=['id;created_at;jmeno;email;telefon;kalkulacka;partner;typ;souhlas;stav;payout',...results.map(row=>[row.id,row.created_at,row.name,row.email,row.phone,row.calculator,row.partner_id,row.lead_type,row.consent_timestamp,row.status,row.payout_amount].map(value=>`"${String(value??'').replaceAll('"','""')}"`).join(';'))].join('\r\n');
-	return new Response(csv,{headers:{'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="vydajnik-leady.csv"','cache-control':'no-store'}});
+	const csv=['id;created_at;jmeno;email;telefon;kalkulacka;partner;typ;souhlas;stav;payout',...results.map(row=>[row.id,row.created_at,row.name,row.email,row.phone,row.calculator,row.partner_id,row.lead_type,row.consent_timestamp,row.status,row.payout_amount].map(csvCell).join(';'))].join('\r\n');
+	return new Response(`\uFEFF${csv}`,{headers:{'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="vydajnik-leady.csv"','cache-control':'no-store','x-content-type-options':'nosniff'}});
 };
 
 export const onRequestPost = async ({ request, env }: { request: Request; env: Env }) => {

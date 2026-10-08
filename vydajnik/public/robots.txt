@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://vydajnik.cz/sitemap.xml

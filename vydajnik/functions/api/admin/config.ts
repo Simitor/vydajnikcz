@@ -9,6 +9,7 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: E
 	if (request.headers.get('authorization') !== `Bearer ${env.ADMIN_TOKEN}`) return json({ error: 'Neautorizováno.' }, 401);
 	let input: Record<string, unknown>;
 	try { input = await request.json(); } catch { return json({ error: 'Neplatný JSON.' }, 400); }
+	if (!input || typeof input !== 'object' || Array.isArray(input)) return json({ error: 'Neplatné údaje formuláře.' }, 422);
 	const db = env.DB;
 	if (input.action === 'partner') {
 		const id = String(input.id || ''); const name = String(input.name || '').trim(); const cats = Array.isArray(input.categories) ? input.categories.filter((x): x is string => typeof x === 'string' && categories.has(x)) : [];

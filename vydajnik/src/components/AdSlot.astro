@@ -1,15 +1,15 @@
 ---
 import { adsConfig, type AdPlacement } from '../config/ads.config';
-interface Props { placement: AdPlacement; class?: string; }
+interface Props { placement?: AdPlacement; id?: string; class?: string; }
 const { placement, class: className = '' } = Astro.props;
-const config = adsConfig[placement];
-const style = `--ad-desktop-height:${config.desktopMinHeight}px;--ad-mobile-height:${config.mobileMinHeight}px`;
+const config = placement ? adsConfig[placement] : undefined;
+const style = config ? `--ad-desktop-height:${config.desktopMinHeight}px;--ad-mobile-height:${config.mobileMinHeight}px` : '';
 ---
-<aside hidden class:list={['ad-slot', config.mobileOnly && 'ad-mobile-only', config.desktopOnly && 'ad-desktop-only', className]} style={style} aria-label="Reklama" data-ad-placement={placement} data-ad-provider={config.provider} data-ad-format={config.format} data-ad-variant={config.variant ?? 'control'}>
+{config && <aside hidden class:list={['ad-slot', config.mobileOnly && 'ad-mobile-only', config.desktopOnly && 'ad-desktop-only', className]} style={style} aria-label="Reklama" data-ad-placement={placement} data-ad-provider={config.provider} data-ad-format={config.format} data-ad-variant={config.variant ?? 'control'}>
 	<span class="ad-label">Reklama</span>
 	<div class="ad-slot-content" data-ad-unit></div>
 	{placement === 'sticky-mobile' && <button class="ad-close" type="button" aria-label="Zavřít reklamu">×</button>}
-</aside>
+</aside>}
 
 <style>
 	.ad-slot[hidden]{display:none}

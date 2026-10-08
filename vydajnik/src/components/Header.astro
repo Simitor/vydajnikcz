@@ -1,0 +1,18 @@
+<header class="site-header">
+  <div class="container nav-wrap">
+    <a class="brand" href="/" aria-label="Výdajník.cz – úvodní stránka"><span class="brand-mark">v.</span><span>výdajník<span class="brand-dot">.cz</span></span></a>
+    <nav aria-label="Hlavní navigace" class="main-nav">
+      <a href="/#kalkulacky">Kalkulačky</a><a href="/#jak-to-funguje">Jak to funguje</a><a href="/#o-projektu">O projektu</a>
+    </nav>
+    <a class="button button-small nav-cta" href="/naklady-na-auto-vs-mhd">Spočítat náklady <span aria-hidden="true">↗</span></a>
+    <button class="menu-toggle" aria-label="Otevřít navigaci" aria-expanded="false">☰</button>
+  </div>
+</header>
+<script>
+  const toggle = document.querySelector<HTMLButtonElement>(".menu-toggle");
+  toggle?.addEventListener("click", () => {
+    const open = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!open));
+    document.querySelector(".main-nav")?.classList.toggle("nav-open", !open);
+  });
+</script>

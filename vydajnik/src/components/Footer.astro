@@ -1,0 +1,17 @@
+<footer class="site-footer" id="o-projektu">
+  <div class="container footer-top">
+    <div><a class="brand footer-brand" href="/"><span class="brand-mark">v.</span><span>výdajník<span class="brand-dot">.cz</span></span></a><p>Rozumět penězům začíná dobrým výpočtem.</p></div>
+    <div class="footer-links"><a href="/#kalkulacky">Kalkulačky</a><a href="/pojisteni-auta">Pojištění auta</a><a href="/reklama-a-spoluprace">Spolupráce</a><a href="/zasady-cookies">Cookies</a><a href="/ochrana-osobnich-udaju">Ochrana soukromí</a><button type="button" class="consent-settings" hidden>Nastavení souhlasu</button></div>
+  </div>
+  <div class="container footer-bottom"><span>© {new Date().getFullYear()} Výdajník.cz</span><span>Výpočty jsou orientační a vycházejí z vámi zadaných údajů.</span></div>
+</footer>
+<script>
+  type TcfUi = (command: string, version: number, callback: (value: unknown, success: boolean) => void) => void;
+  declare global { interface Window { __tcfapi?: TcfUi } }
+  const button = document.querySelector<HTMLButtonElement>(".consent-settings");
+  const update = () => { if (button && window.__tcfapi) button.hidden = false; };
+  update();
+  const timer = window.setInterval(() => { if (window.__tcfapi) { update(); window.clearInterval(timer); } }, 250);
+  window.setTimeout(() => window.clearInterval(timer), 8000);
+  button?.addEventListener("click", () => window.__tcfapi?.("displayConsentUi", 2, () => undefined));
+</script>
