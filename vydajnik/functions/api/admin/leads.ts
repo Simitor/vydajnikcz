@@ -1,31 +1,26 @@
 import { leadStatusLabels } from '../../../src/lib/admin/record-model.ts';
-interface D1 { prepare(sql: string): { bind(...values: unknown[]): { all<T>(): Promise<{ results: T[] }>; first<T>(): Promise<T | null>; run(): Promise<{ meta: { changes: number } }> } }; }
-interface Env { DB?: D1; ADMIN_TOKEN?: string; }
+import { AdminError, choice, json, leadId, money, readInput, withAdmin } from '../../../src/lib/admin/server.ts';
+import type { AdminContext } from '../../../src/lib/admin/server.ts';
 const csvCell = (value: unknown) => {
 	let text = String(value ?? '');
 	// Quoting alone does not stop Excel from interpreting a cell as a formula.
 	if (typeof value === 'string' && (/^[\t\r\n]/.test(text) || /^[\s\u0000-\u001f]*[=+\-@]/.test(text))) text = `'${text}`;
 	return `"${text.replaceAll('"', '""')}"`;
 };
-export const onRequestGet = async ({ request, env }: { request: Request; env: Env }) => {
-	if(!env.ADMIN_TOKEN||!env.DB)return Response.json({error:'Admin není nakonfigurován.'},{status:503});
-	if(request.headers.get('authorization')!==`Bearer ${env.ADMIN_TOKEN}`)return Response.json({error:'Neautorizováno.'},{status:401});
-	const {results}=await env.DB.prepare('select id,created_at,name,email,phone,calculator,partner_id,lead_type,consent_timestamp,status,payout_amount from monetization_leads order by created_at desc limit 5000').bind().all<Record<string,unknown>>();
+export const onRequestGet = (context: AdminContext) => withAdmin(context, async db => {
+	const {results}=await db.prepare('select id,created_at,name,email,phone,calculator,partner_id,lead_type,consent_timestamp,status,payout_amount from monetization_leads order by created_at desc limit 5000').bind().all<Record<string,unknown>>();
 	const csv=['id;created_at;jmeno;email;telefon;kalkulacka;partner;typ;souhlas;stav;payout',...results.map(row=>[row.id,row.created_at,row.name,row.email,row.phone,row.calculator,row.partner_id,row.lead_type,row.consent_timestamp,row.status,row.payout_amount].map(csvCell).join(';'))].join('\r\n');
 	return new Response(`\uFEFF${csv}`,{headers:{'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="vydajnik-leady.csv"','cache-control':'no-store','x-content-type-options':'nosniff'}});
-};
+});
 
-export const onRequestPost = async ({ request, env }: { request: Request; env: Env }) => {
-	if(!env.ADMIN_TOKEN||!env.DB)return Response.json({error:'Admin není nakonfigurován.'},{status:503});
-	if(request.headers.get('authorization')!==`Bearer ${env.ADMIN_TOKEN}`)return Response.json({error:'Neautorizováno.'},{status:401});
-	let body:Record<string,unknown>;try{body=await request.json();}catch{return Response.json({error:'Neplatný JSON.'},{status:400});}
-	if(!body||typeof body!=='object'||Array.isArray(body))return Response.json({error:'Neplatné údaje poptávky.'},{status:422});
-	const id=String(body.id||'');const status=String(body.status||'');const statuses=new Set(Object.keys(leadStatusLabels));
-	const existing=await env.DB.prepare('select payout_amount from monetization_leads where id=?').bind(id).first<{payout_amount:number|null}>();
-	if(!existing)return Response.json({error:'Poptávka nebyla nalezena. Obnovte seznam.'},{status:404});
-	const payout=!Object.hasOwn(body,'payout')?existing.payout_amount:body.payout===''||body.payout==null?null:typeof body.payout==='number'?body.payout:NaN;
-	if(!/^[0-9a-f-]{36}$/i.test(id)||!statuses.has(status)||!(payout===null||(Number.isFinite(payout)&&payout>=0&&payout<=100000000)))return Response.json({error:'Zadejte platné ID, stav a případnou odměnu.'},{status:422});
-	const result=await env.DB.prepare('update monetization_leads set status=?,payout_amount=?,converted_at=case when ? in (\'converted\',\'paid\') and converted_at is null then ? else converted_at end where id=?').bind(status,payout,status,new Date().toISOString(),id).run();
-	if(!result.meta.changes)return Response.json({error:'Poptávka nebyla nalezena.'},{status:404});
-	return Response.json({ok:true},{headers:{'cache-control':'no-store'}});
-};
+export const onRequestPost = (context: AdminContext) => withAdmin(context, async db => {
+	const body = await readInput(context.request);
+	const id = leadId(body.id); const status = choice(body.status, Object.keys(leadStatusLabels), 'Stav poptávky');
+	const explicitPayout = Object.hasOwn(body, 'payout') ? money(body.payout, 'Potvrzená odměna', 100_000_000, true) : undefined;
+	const existing = await db.prepare('select payout_amount from monetization_leads where id=?').bind(id).first<{ payout_amount: number | null }>();
+	if (!existing) throw new AdminError('Poptávka nebyla nalezena. Obnovte seznam.', 404);
+	const payout = explicitPayout === undefined ? existing.payout_amount : explicitPayout;
+	const result = await db.prepare("update monetization_leads set status=?,payout_amount=?,converted_at=case when ? in ('converted','paid') and converted_at is null then ? else converted_at end where id=?").bind(status, payout, status, new Date().toISOString(), id).run();
+	if (!result.meta.changes) throw new AdminError('Poptávka nebyla nalezena.', 404);
+	return json({ ok: true });
+});

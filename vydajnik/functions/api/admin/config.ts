@@ -1,97 +1,99 @@
 import { categoryLabels } from '../../../src/lib/admin/record-model.ts';
+import { adPlacements } from '../../../src/lib/admin/settings.ts';
+import { AdminError, choice, flag, httpsUrl, json, money, number, optionalText, readInput, slug, strings, text, withAdmin } from '../../../src/lib/admin/server.ts';
+import type { AdminContext } from '../../../src/lib/admin/server.ts';
 
-interface Statement { bind(...values: unknown[]): Statement; run(): Promise<{ meta: { changes: number } }>; first<T>(): Promise<T | null>; }
-interface Env { DB?: { prepare(sql: string): Statement }; ADMIN_TOKEN?: string; }
-const categories = new Set(Object.keys(categoryLabels));
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
-const httpsUrl = (value: unknown) => { if (typeof value !== 'string') return false; try { return new URL(value).protocol === 'https:'; } catch { return false; } };
-interface PartnerRow { id: string; display_name: string; active: number; licensed_distributor: number; registration_url: string | null; categories_json: string; regions_json: string; }
-interface ProductRow { id: string; partner_id: string; category: string; coverage_json: string; }
-const licensed = (partner: PartnerRow) => Boolean(partner.licensed_distributor && httpsUrl(partner.registration_url));
-
-export const onRequestPost = async ({ request, env }: { request: Request; env: Env }) => {
-    if (!env.ADMIN_TOKEN || !env.DB) return json({ error: 'Admin není nakonfigurován.' }, 503);
-    if (request.headers.get('authorization') !== `Bearer ${env.ADMIN_TOKEN}`) return json({ error: 'Neautorizováno.' }, 401);
-    let input: Record<string, unknown>;
-    try { input = await request.json(); } catch { return json({ error: 'Neplatný JSON.' }, 400); }
-    if (!input || typeof input !== 'object' || Array.isArray(input)) return json({ error: 'Neplatné údaje formuláře.' }, 422);
-    const db = env.DB;
-    const action = String(input.action || ''); const id = String(input.id || '');
-    const operation = input.operation ?? 'upsert';
-    if (!['create', 'update', 'upsert'].includes(String(operation))) return json({ error: 'Neznámý způsob ukládání.' }, 422);
-
-    if (action === 'partner-active' || action === 'product-active') {
-        if (typeof input.active !== 'boolean') return json({ error: 'Zvolte aktivní nebo vypnutý stav.' }, 422);
-        if (action === 'partner-active') {
-            const partner = await db.prepare('select * from monetization_partners where id=?').bind(id).first<PartnerRow>();
-            if (!partner) return json({ error: 'Partner nebyl nalezen. Obnovte seznam.' }, 404);
-            if (input.active) {
-                const insurance = await db.prepare("select id from monetization_products where partner_id=? and category='car-insurance' and active=1 limit 1").bind(id).first();
-                if ((partner.categories_json.includes('car-insurance') || insurance) && !licensed(partner)) return json({ error: 'Před aktivací pojišťovacích nabídek ověřte licenci partnera a odkaz na jeho evidenci.' }, 422);
-            }
-            const result = await db.prepare('update monetization_partners set active=? where id=?').bind(input.active ? 1 : 0, id).run();
-            return result.meta.changes ? json({ ok: true }) : json({ error: 'Partner nebyl nalezen.' }, 404);
-        }
-        const partnerId = String(input.partnerId || '');
-        const product = await db.prepare('select * from monetization_products where partner_id=? and id=?').bind(partnerId, id).first<ProductRow>();
-        if (!product) return json({ error: 'Nabídka nebyla nalezena. Obnovte seznam.' }, 404);
-        if (input.active) {
-            const partner = await db.prepare('select * from monetization_partners where id=?').bind(partnerId).first<PartnerRow>();
-            if (!partner) return json({ error: 'Partner nabídky nebyl nalezen.' }, 422);
-            if (product.category === 'car-insurance' && !licensed(partner)) return json({ error: 'Pojištění lze zapnout pouze u ověřeného distributora s odkazem na evidenci.' }, 422);
-        }
-        const result = await db.prepare('update monetization_products set active=?,updated_at=? where partner_id=? and id=?').bind(input.active ? 1 : 0, new Date().toISOString(), partnerId, id).run();
-        return result.meta.changes ? json({ ok: true }) : json({ error: 'Nabídka nebyla nalezena.' }, 404);
-    }
-
-    if (action === 'partner') {
-        const name = String(input.name || '').trim();
-        const cats = Array.isArray(input.categories) ? input.categories : [];
-        if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(id) || name.length < 2 || name.length > 100 || !cats.length || cats.some(value => typeof value !== 'string' || !categories.has(value))) return json({ error: 'Doplňte platné ID, název a alespoň jednu platnou kategorii.' }, 422);
-        const existing = await db.prepare('select * from monetization_partners where id=?').bind(id).first<PartnerRow>();
-        if (operation === 'create' && existing) return json({ error: 'Partner s tímto ID již existuje. Otevřete jej ze seznamu pomocí Upravit.' }, 409);
-        if (operation === 'update' && !existing) return json({ error: 'Upravovaný partner již neexistuje. Obnovte seznam.' }, 404);
-        const activeInsurance = await db.prepare("select id from monetization_products where partner_id=? and category='car-insurance' and active=1 limit 1").bind(id).first();
-        if (input.active === true && (cats.includes('car-insurance') || activeInsurance) && (input.licensed !== true || !httpsUrl(input.registrationUrl))) return json({ error: 'Před aktivací pojišťovací nabídky ověřte licenci partnera a uložte odkaz na jeho evidenci.' }, 422);
-        const priority = Number(input.priority ?? 0);
-        if (!Number.isFinite(priority) || priority < 0 || priority > 1000) return json({ error: 'Priorita musí být od 0 do 1000.' }, 422);
-        const secretRef = typeof input.secretRef === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(input.secretRef) ? input.secretRef : null;
-        const regions = Array.isArray(input.regions) ? JSON.stringify(input.regions.filter(value => typeof value === 'string').slice(0, 30)) : existing?.regions_json ?? '[]';
-        const values = [name, input.active === true ? 1 : 0, input.licensed === true ? 1 : 0, httpsUrl(input.registrationUrl) ? input.registrationUrl : null, JSON.stringify(cats), regions, priority, secretRef, String(input.payoutModel || '').slice(0, 80)];
-        if (operation === 'update') {
-            const result = await db.prepare('update monetization_partners set display_name=?,active=?,licensed_distributor=?,registration_url=?,categories_json=?,regions_json=?,priority=?,lead_endpoint_secret_ref=?,payout_model=? where id=?').bind(...values, id).run();
-            return result.meta.changes ? json({ ok: true }) : json({ error: 'Upravovaný partner již neexistuje.' }, 404);
-        }
-        const conflict = operation === 'create' ? '' : ' on conflict(id) do update set display_name=excluded.display_name,active=excluded.active,licensed_distributor=excluded.licensed_distributor,registration_url=excluded.registration_url,categories_json=excluded.categories_json,regions_json=excluded.regions_json,priority=excluded.priority,lead_endpoint_secret_ref=excluded.lead_endpoint_secret_ref,payout_model=excluded.payout_model';
-        await db.prepare('insert into monetization_partners (id,display_name,active,licensed_distributor,registration_url,categories_json,regions_json,priority,lead_endpoint_secret_ref,payout_model) values (?,?,?,?,?,?,?,?,?,?)' + conflict).bind(id, ...values).run();
-        return json({ ok: true });
-    }
-    if (action === 'product') {
-        const partnerId = String(input.partnerId || ''); const category = String(input.category || ''); const name = String(input.name || '').trim();
-        const price = input.price === null || input.price === '' ? null : typeof input.price === 'number' ? input.price : NaN;
-        const period = input.period == null || input.period === '' ? null : String(input.period);
-        if (!/^[a-z0-9][a-z0-9-]{1,59}$/.test(id) || !categories.has(category) || name.length < 2 || name.length > 120 || !(price === null || (Number.isFinite(price) && price >= 0 && price < 100000000)) || !httpsUrl(input.affiliateUrl) || (period !== null && !['month', 'year', 'one-off'].includes(period))) return json({ error: 'Zkontrolujte ID, kategorii, název, cenu, období a zabezpečený partnerský odkaz.' }, 422);
-        const existing = await db.prepare('select * from monetization_products where partner_id=? and id=?').bind(partnerId, id).first<ProductRow>();
-        if (operation === 'create' && existing) return json({ error: 'Nabídka s tímto ID již u partnera existuje. Otevřete ji ze seznamu pomocí Upravit.' }, 409);
-        if (operation === 'update' && !existing) return json({ error: 'Upravovaná nabídka již neexistuje. Obnovte seznam.' }, 404);
-        const partner = await db.prepare('select * from monetization_partners where id=?').bind(partnerId).first<PartnerRow>();
-        if (!partner) return json({ error: 'Nejprve uložte partnera nebo vyberte existujícího partnera ze seznamu.' }, 422);
-        if (category === 'car-insurance' && input.active === true && !licensed(partner)) return json({ error: 'Pojištění lze zapnout pouze u ověřeného distributora s odkazem na evidenci oprávnění.' }, 422);
-        const coverage = Array.isArray(input.coverage) ? JSON.stringify(input.coverage.filter(value => typeof value === 'string').slice(0, 20)) : existing?.coverage_json ?? '[]';
-        const values = [partner.display_name, category, name, price, period, input.indicative === true ? 1 : 0, new Date().toISOString(), String(input.excess || '').slice(0, 80) || null, coverage, httpsUrl(input.termsUrl) ? input.termsUrl : null, input.affiliateUrl, input.sponsored === true ? 1 : 0, input.active === true ? 1 : 0];
-        if (operation === 'update') {
-            const result = await db.prepare('update monetization_products set provider_name=?,category=?,product_name=?,price_amount=?,price_period=?,indicative_price=?,updated_at=?,excess=?,coverage_json=?,terms_url=?,affiliate_url=?,sponsored=?,active=? where partner_id=? and id=?').bind(...values, partnerId, id).run();
-            return result.meta.changes ? json({ ok: true }) : json({ error: 'Upravovaná nabídka již neexistuje.' }, 404);
-        }
-        const conflict = operation === 'create' ? '' : ' on conflict(partner_id,id) do update set provider_name=excluded.provider_name,category=excluded.category,product_name=excluded.product_name,price_amount=excluded.price_amount,price_period=excluded.price_period,indicative_price=excluded.indicative_price,updated_at=excluded.updated_at,excess=excluded.excess,coverage_json=excluded.coverage_json,terms_url=excluded.terms_url,affiliate_url=excluded.affiliate_url,sponsored=excluded.sponsored,active=excluded.active';
-        await db.prepare("insert into monetization_products (partner_id,id,price_currency,provider_name,category,product_name,price_amount,price_period,indicative_price,updated_at,excess,coverage_json,terms_url,affiliate_url,sponsored,active) values (?,?,'CZK',?,?,?,?,?,?,?,?,?,?,?,?,?)" + conflict).bind(partnerId, id, ...values).run();
-        return json({ ok: true });
-    }
-    if (action === 'placement') {
-        const allowed = new Set(['top-banner', 'between-hero-content', 'calculator-middle', 'calculator-bottom', 'article-inline-1', 'article-inline-2', 'before-faq', 'footer', 'sticky-mobile']); const placement = String(input.placement || '');
-        if (!allowed.has(placement) || !['adsense', 'gam', 'custom'].includes(String(input.provider || ''))) return json({ error: 'Neznámá reklamní pozice nebo poskytovatel.' }, 422);
-        const result = await db.prepare('update ad_placements set enabled=?,provider=?,unit_id=?,variant=?,updated_at=? where placement=?').bind(input.enabled === true ? 1 : 0, String(input.provider || 'adsense'), String(input.unitId || '').slice(0, 120) || null, String(input.variant || 'control').slice(0, 40), new Date().toISOString(), placement).run();
-        return result.meta.changes ? json({ ok: true }) : json({ error: 'Reklamní pozice nebyla nalezena.' }, 404);
-    }
-    return json({ error: 'Neznámá operace.' }, 400);
+interface PartnerRow { id: string; display_name: string; licensed_distributor: number; registration_url: string | null; categories_json: string; regions_json: string; }
+interface ProductRow { id: string; category: string; coverage_json: string; }
+const licensed = (partner: PartnerRow) => {
+	try { return Boolean(partner.licensed_distributor && httpsUrl(partner.registration_url, 'Registr partnera')); } catch { return false; }
 };
+export const onRequestPost = (context: AdminContext) => withAdmin(context, async db => {
+	const input = await readInput(context.request);
+	const action = choice(input.action, ['partner', 'product', 'partner-active', 'product-active', 'placement'], 'Operace');
+	const operation = choice(input.operation ?? 'upsert', ['create', 'update', 'upsert'], 'Způsob ukládání');
+	if (action === 'placement') {
+		const placement = choice(input.placement, adPlacements, 'Reklamní pozice');
+		const provider = choice(input.provider, ['adsense', 'gam', 'custom'], 'Poskytovatel');
+		const unitId = optionalText(input.unitId, 'ID reklamní jednotky', 120);
+		const variant = text(input.variant ?? 'control', 'Varianta', 40);
+		const enabled = flag(input.enabled, 'Zapnutí pozice');
+		const result = await db.prepare('update ad_placements set enabled=?,provider=?,unit_id=?,variant=?,updated_at=? where placement=?').bind(enabled ? 1 : 0, provider, unitId, variant, new Date().toISOString(), placement).run();
+		if (!result.meta.changes) throw new AdminError('Reklamní pozice nebyla nalezena.', 404);
+		return json({ ok: true });
+	}
+	const id = slug(input.id, 'ID', action.startsWith('product') ? 60 : 40);
+	if (action === 'partner-active') {
+		if (input.active === undefined) throw new AdminError('Zvolte aktivní nebo vypnutý stav.');
+		const active = flag(input.active, 'Aktivní stav');
+		const partner = await db.prepare('select * from monetization_partners where id=?').bind(id).first<PartnerRow>();
+		if (!partner) throw new AdminError('Partner nebyl nalezen. Obnovte seznam.', 404);
+		const insurance = await db.prepare("select id from monetization_products where partner_id=? and category='car-insurance' and active=1 limit 1").bind(id).first();
+		if (active && (partner.categories_json.includes('car-insurance') || insurance) && !licensed(partner)) throw new AdminError('Před aktivací pojišťovacích nabídek ověřte licenci partnera a odkaz na jeho evidenci.');
+		const result = await db.prepare('update monetization_partners set active=? where id=?').bind(active ? 1 : 0, id).run();
+		if (!result.meta.changes) throw new AdminError('Partner nebyl nalezen.', 404);
+		return json({ ok: true });
+	}
+	if (action === 'partner') {
+		const name = text(input.name, 'Název firmy', 100, 2);
+		const cats = strings(input.categories, 'Kategorie', 8, 40, 1);
+		cats.forEach(category => choice(category, Object.keys(categoryLabels), 'Kategorie'));
+		const active = flag(input.active, 'Aktivní stav'); const distributor = flag(input.licensed, 'Ověření distributora');
+		const registration = httpsUrl(input.registrationUrl, 'Registr partnera', true);
+		const priority = number(input.priority ?? 0, 'Priorita', 1000, true);
+		const secretRef = optionalText(input.secretRef, 'Webhook secret env klíč', 64);
+		if (secretRef && !/^[A-Z][A-Z0-9_]{2,63}$/.test(secretRef)) throw new AdminError('Webhook secret env klíč: použijte velká písmena, číslice a podtržítka, délka 3 až 64 znaků.');
+		const payoutModel = optionalText(input.payoutModel, 'Model odměny', 80);
+		const existing = await db.prepare('select * from monetization_partners where id=?').bind(id).first<PartnerRow>();
+		if (operation === 'create' && existing) throw new AdminError('Partner s tímto ID již existuje. Otevřete jej ze seznamu pomocí Upravit.', 409);
+		if (operation === 'update' && !existing) throw new AdminError('Upravovaný partner již neexistuje. Obnovte seznam.', 404);
+		const insurance = await db.prepare("select id from monetization_products where partner_id=? and category='car-insurance' and active=1 limit 1").bind(id).first();
+		if (active && (cats.includes('car-insurance') || insurance) && (!distributor || !registration)) throw new AdminError('Před aktivací pojišťovací nabídky ověřte licenci partnera a uložte odkaz na jeho evidenci.');
+		const regions = input.regions === undefined ? existing?.regions_json ?? '[]' : JSON.stringify(strings(input.regions, 'Regiony', 30, 80));
+		const values = [name, active ? 1 : 0, distributor ? 1 : 0, registration, JSON.stringify(cats), regions, priority, secretRef, payoutModel];
+		if (operation === 'update') {
+			const result = await db.prepare('update monetization_partners set display_name=?,active=?,licensed_distributor=?,registration_url=?,categories_json=?,regions_json=?,priority=?,lead_endpoint_secret_ref=?,payout_model=? where id=?').bind(...values, id).run();
+			if (!result.meta.changes) throw new AdminError('Upravovaný partner již neexistuje.', 404);
+		} else {
+			const conflict = operation === 'create' ? '' : ' on conflict(id) do update set display_name=excluded.display_name,active=excluded.active,licensed_distributor=excluded.licensed_distributor,registration_url=excluded.registration_url,categories_json=excluded.categories_json,regions_json=excluded.regions_json,priority=excluded.priority,lead_endpoint_secret_ref=excluded.lead_endpoint_secret_ref,payout_model=excluded.payout_model';
+			await db.prepare('insert into monetization_partners (id,display_name,active,licensed_distributor,registration_url,categories_json,regions_json,priority,lead_endpoint_secret_ref,payout_model) values (?,?,?,?,?,?,?,?,?,?)' + conflict).bind(id, ...values).run();
+		}
+		return json({ ok: true });
+	}
+	const partnerId = slug(input.partnerId, 'Partner ID');
+	const existing = await db.prepare('select * from monetization_products where partner_id=? and id=?').bind(partnerId, id).first<ProductRow>();
+	if (action === 'product-active') {
+		if (input.active === undefined) throw new AdminError('Zvolte aktivní nebo vypnutý stav.');
+		const active = flag(input.active, 'Aktivní stav');
+		if (!existing) throw new AdminError('Nabídka nebyla nalezena. Obnovte seznam.', 404);
+		const partner = await db.prepare('select * from monetization_partners where id=?').bind(partnerId).first<PartnerRow>();
+		if (!partner) throw new AdminError('Partner nabídky nebyl nalezen.');
+		if (active && existing.category === 'car-insurance' && !licensed(partner)) throw new AdminError('Pojištění lze zapnout pouze u ověřeného distributora s odkazem na evidenci.');
+		const result = await db.prepare('update monetization_products set active=?,updated_at=? where partner_id=? and id=?').bind(active ? 1 : 0, new Date().toISOString(), partnerId, id).run();
+		if (!result.meta.changes) throw new AdminError('Nabídka nebyla nalezena.', 404);
+		return json({ ok: true });
+	}
+	const name = text(input.name, 'Název produktu', 120, 2);
+	const category = choice(input.category, Object.keys(categoryLabels), 'Kategorie');
+	const price = money(input.price, 'Cena', 99_999_999.99, true);
+	const period = input.period == null || input.period === '' ? null : choice(input.period, ['month', 'year', 'one-off'], 'Období');
+	const affiliate = httpsUrl(input.affiliateUrl, 'Partnerská URL');
+	const terms = httpsUrl(input.termsUrl, 'Podmínky URL', true);
+	const excess = optionalText(input.excess, 'Spoluúčast', 80);
+	const indicative = flag(input.indicative, 'Orientační cena'); const sponsored = flag(input.sponsored, 'Sponzorovaná pozice'); const active = flag(input.active, 'Aktivní stav');
+	if (operation === 'create' && existing) throw new AdminError('Nabídka s tímto ID již u partnera existuje. Otevřete ji ze seznamu pomocí Upravit.', 409);
+	if (operation === 'update' && !existing) throw new AdminError('Upravovaná nabídka již neexistuje. Obnovte seznam.', 404);
+	const partner = await db.prepare('select * from monetization_partners where id=?').bind(partnerId).first<PartnerRow>();
+	if (!partner) throw new AdminError('Nejprve uložte partnera nebo vyberte existujícího partnera ze seznamu.');
+	if (active && category === 'car-insurance' && !licensed(partner)) throw new AdminError('Pojištění lze zapnout pouze u ověřeného distributora s odkazem na evidenci oprávnění.');
+	const coverage = input.coverage === undefined ? existing?.coverage_json ?? '[]' : JSON.stringify(strings(input.coverage, 'Krytí', 20, 200));
+	const values = [partner.display_name, category, name, price, period, indicative ? 1 : 0, new Date().toISOString(), excess, coverage, terms, affiliate, sponsored ? 1 : 0, active ? 1 : 0];
+	if (operation === 'update') {
+		const result = await db.prepare('update monetization_products set provider_name=?,category=?,product_name=?,price_amount=?,price_period=?,indicative_price=?,updated_at=?,excess=?,coverage_json=?,terms_url=?,affiliate_url=?,sponsored=?,active=? where partner_id=? and id=?').bind(...values, partnerId, id).run();
+		if (!result.meta.changes) throw new AdminError('Upravovaná nabídka již neexistuje.', 404);
+	} else {
+		const conflict = operation === 'create' ? '' : ' on conflict(partner_id,id) do update set provider_name=excluded.provider_name,category=excluded.category,product_name=excluded.product_name,price_amount=excluded.price_amount,price_period=excluded.price_period,indicative_price=excluded.indicative_price,updated_at=excluded.updated_at,excess=excluded.excess,coverage_json=excluded.coverage_json,terms_url=excluded.terms_url,affiliate_url=excluded.affiliate_url,sponsored=excluded.sponsored,active=excluded.active';
+		await db.prepare("insert into monetization_products (partner_id,id,price_currency,provider_name,category,product_name,price_amount,price_period,indicative_price,updated_at,excess,coverage_json,terms_url,affiliate_url,sponsored,active) values (?,?,'CZK',?,?,?,?,?,?,?,?,?,?,?,?,?)" + conflict).bind(partnerId, id, ...values).run();
+	}
+	return json({ ok: true });
+});

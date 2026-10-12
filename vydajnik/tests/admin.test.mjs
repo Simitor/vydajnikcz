@@ -52,7 +52,9 @@ test('all five forms save typed values and remain saved after reopening the data
 	for (const submission of submissions) {
 		const response = await save(submission, env);
 		assert.equal(response.status, 200);
-		assert.deepEqual(await response.json(), { ok: true });
+		const result = await response.json();
+		assert.equal(result.ok, true);
+		if (submission.refreshMetrics) assert.equal(result.outcome, 'created');
 	}
 	const overview = await metrics({ request: request('/api/admin/metrics'), env });
 	const data = await overview.json();

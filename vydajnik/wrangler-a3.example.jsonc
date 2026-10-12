@@ -1,0 +1,15 @@
+// Copy to wrangler-a3.local.jsonc and fill in the EXISTING D1 bound to Pages as DB.
+// This configuration is used only for database maintenance, not website deployment.
+{
+  "name": "vydajnik-a3-migrations",
+  "compatibility_date": "2026-10-12",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "DOPLNTE_NAZEV_EXISTUJICI_DATABAZE",
+      "database_id": "DOPLNTE_UUID_EXISTUJICI_DATABAZE",
+      "migrations_dir": "database/migrations",
+      "migrations_table": "vydajnik_admin_migrations"
+    }
+  ]
+}

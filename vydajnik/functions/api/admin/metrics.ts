@@ -1,18 +1,13 @@
-interface D1 {
-	prepare(sql: string): { bind(...values: unknown[]): { first<T>(): Promise<T | null>; all<T>(): Promise<{ results: T[] }> } };
-}
-interface Env { DB?: D1; ADMIN_TOKEN?: string; }
+import { withAdmin } from '../../../src/lib/admin/server.ts';
+import type { AdminContext } from '../../../src/lib/admin/server.ts';
 interface MetricRow { amount: number; }
 
-export const onRequestGet = async ({ request, env }: { request: Request; env: Env }) => {
-	if (!env.ADMIN_TOKEN || !env.DB) return Response.json({ error: 'Admin není nakonfigurován.' }, { status: 503 });
-	if (request.headers.get('authorization') !== `Bearer ${env.ADMIN_TOKEN}`) return Response.json({ error: 'Neautorizováno.' }, { status: 401, headers: { 'www-authenticate': 'Bearer' } });
-	const db = env.DB;
+export const onRequestGet = (context: AdminContext) => withAdmin(context, async db => {
 	const [month, last30, year, sourceRevenue, funnel, daily, leadStatus, affiliate, adStats, adVariants] = await Promise.all([
-		db.prepare("select coalesce(sum(amount),0) as amount from monetization_revenue where occurred_at >= date('now','start of month')").first<MetricRow>(),
-		db.prepare("select coalesce(sum(amount),0) as amount from monetization_revenue where occurred_at >= date('now','-30 day')").first<MetricRow>(),
-		db.prepare("select coalesce(sum(amount),0) as amount from monetization_revenue where occurred_at >= date('now','start of year')").first<MetricRow>(),
-		db.prepare("select source_type as source, coalesce(sum(amount),0) as amount from monetization_revenue where occurred_at >= date('now','-30 day') group by source_type").all<{source:string;amount:number}>(),
+		db.prepare("select round(coalesce(sum(amount),0),2) as amount from monetization_revenue where occurred_at >= date('now','start of month')").first<MetricRow>(),
+		db.prepare("select round(coalesce(sum(amount),0),2) as amount from monetization_revenue where occurred_at >= date('now','-30 day')").first<MetricRow>(),
+		db.prepare("select round(coalesce(sum(amount),0),2) as amount from monetization_revenue where occurred_at >= date('now','start of year')").first<MetricRow>(),
+		db.prepare("select source_type as source, round(coalesce(sum(amount),0),2) as amount from monetization_revenue where occurred_at >= date('now','-30 day') group by source_type").all<{source:string;amount:number}>(),
 		db.prepare("select event_name as name, count(*) as count from monetization_events where created_at >= date('now','-30 day') group by event_name").all<{name:string;count:number}>(),
 		db.prepare("select date(created_at) as day, count(*) as count from monetization_events where event_name='page_view' and created_at >= date('now','-30 day') group by date(created_at) order by day").all<{day:string;count:number}>(),
 		db.prepare("select status, count(*) as count from monetization_leads group by status").all<{status:string;count:number}>(),
@@ -22,4 +17,4 @@ export const onRequestGet = async ({ request, env }: { request: Request; env: En
 	]);
 	const consentedViews = daily.results.reduce((sum, row) => sum + row.count, 0);
 	return Response.json({ generatedAt: new Date().toISOString(), revenue: { month: month?.amount ?? 0, last30: last30?.amount ?? 0, year: year?.amount ?? 0, per1000Visitors: consentedViews ? (last30?.amount ?? 0) * 1000 / consentedViews : 0 }, sourceRevenue: sourceRevenue.results, funnel: funnel.results, dailyTraffic: daily.results, leads: leadStatus.results, affiliate: affiliate.results, adVariants: adVariants.results, ads: { impressions: adStats?.impressions ?? 0, clicks: adStats?.clicks ?? 0, ctr: adStats?.impressions ? 100 * adStats.clicks / adStats.impressions : 0 } }, { headers: { 'cache-control': 'no-store' } });
-};
+});

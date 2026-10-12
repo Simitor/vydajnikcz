@@ -15,7 +15,7 @@
 
 Administrace odesílá partnery, produkty a reklamní pozice do `/api/admin/config`, příjmy do `/api/admin/revenue` a reklamní výkazy do `/api/admin/ad-report`. Export kontaktů se stahuje z `/api/admin/leads` s autorizační hlavičkou. Při ukládání jsou tlačítka dočasně vypnutá; chyby ponechávají zadané hodnoty. Po finančním zápisu se obnoví přehled. Neúspěšné obnovení přehledu nezmění potvrzené uložení na chybu ukládání.
 
-Ochrana tlačítka brání opakovanému požadavku během ukládání. Deduplikace finančních referencí v databázi patří do navazujícího bodu A3. Stejný příjem z reklamního výkazu nevkládejte ještě jednou přes obecný formulář příjmů.
+Ochrana tlačítka brání opakovanému požadavku během ukládání. A3 navíc chrání reference v databázi a váže reklamní příjem přímo na výkaz. Reklamní příjmy se vkládají výhradně přes reklamní výkazy.
 
 ## Správa záznamů A2
 
@@ -27,9 +27,19 @@ Na `/admin/monetizace/` jsou po přihlášení seznamy partnerů, nabídek a pop
 
 A2 používá stávající tabulky D1; nevyžaduje novou migraci ani nové proměnné prostředí. `npm test` navíc ověřuje skutečné SQL seznamů a filtrů, složenou identitu nabídek, editaci bez ztráty dalších údajů, konflikty ID, aktivaci a veřejné chování i změny stavu poptávky. Testovací databáze je oddělená od provozních dat.
 
+## Kontroly serveru a finanční importy A3
+
+Administrační API ověřuje typy, povolené hodnoty, délky, částky na haléře, skutečná data a vazby na partnery. Neplatné hodnoty nekrátí ani nezahazuje. Chybějící záznam při úpravě vrací 404; neplatná data 422; rozpor v existující referenci nebo souběh souhrnného a dílčího výkazu 409. Chyby databáze vrací čitelnou zprávu bez vnitřních detailů.
+
+Ruční příjem identifikuje zdroj, partner a reference bez okrajových mezer. Stejné údaje vrátí `unchanged`, rozdílné údaje se stejným klíčem původní částku nepřepíšou. Reklamní výkaz identifikuje poskytovatel, datum a pozice. Jeho opakování nezvýší příjmy; oprava aktualizuje existující řádek i příjem. Databáze brání kombinaci souhrnu `all` s jednotlivými pozicemi stejného poskytovatele a dne. Jedinečné indexy a transakční zápisy chrání i souběžné požadavky.
+
+**A3 vyžaduje jednorázovou migraci D1.** Přesný postup, kontrola starých dat a záloha jsou v [A3-NASAZENI.md](A3-NASAZENI.md). Bez migrace server finanční import odmítne s pokynem k přípravě databáze. Nejasná stará historie migraci zastaví před změnou finančních záznamů; jasné vazby zachová a chybějící příjem existujícího výkazu doplní. Nasazovací konfigurace má vlastní název souboru a používá se pouze s výslovným `--config`.
+
+`npm test` používá základní schéma a skutečnou SQL migraci v oddělené SQLite databázi. Ověřuje opakované a souběžné importy, opravy částek, shodné reference více pozic, rollback při selhání příjmu, zachování staré historie, zastavení migrace při nejasných údajích i kontroly ostatních administračních formulářů.
+
 ## Nasazení na Cloudflare Pages
 
-Sestavení vytváří statické stránky v `dist/`; adresář `functions/` dodává API routy. V Cloudflare Pages nastavte build příkaz `npm run build`, výstupní složku `dist` a D1 binding pojmenovaný `DB`. Pro databázi použijte `database/monetization-d1.sql`.
+Sestavení vytváří statické stránky v `dist/`; adresář `functions/` dodává API routy. V Cloudflare Pages nastavte build příkaz `npm run build`, výstupní složku `dist` a D1 binding pojmenovaný `DB`. Pro novou databázi použijte `database/monetization-d1.sql`, poté migraci `database/migrations/0001_admin_a3.sql` podle [A3-NASAZENI.md](A3-NASAZENI.md). Existující databázi migrujte podle téhož postupu.
 
 Nastavte tajné proměnné:
 

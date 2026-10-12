@@ -1,4 +1,6 @@
 -- Cloudflare D1 monetization foundation. Only verified partner/product records belong here.
+-- After creating a NEW database, apply database/migrations/0001_admin_a3.sql.
+-- For existing databases, follow A3-NASAZENI.md and run the read-only preflight first.
 create table if not exists monetization_events (
   id integer primary key autoincrement,
   event_name text not null,

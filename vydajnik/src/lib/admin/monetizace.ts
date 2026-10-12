@@ -149,17 +149,18 @@ export const initAdmin = () => {
 				const response = await requestAdmin(submission.endpoint, token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(submission.payload) });
 				const result = await readJson(response, true);
 				if (result.ok !== true) throw new AdminRequestError('Server nepotvrdil uložení.', response.status, true);
+				const savedMessage = ['created', 'updated', 'unchanged'].includes(result.outcome) && typeof result.message === 'string' ? result.message : submission.successMessage;
 				if (version !== sessionVersion) return;
-				message(output, submission.successMessage, 'success');
+				message(output, savedMessage, 'success');
 				if (submission.refreshMetrics || kind === 'partner' || kind === 'product') {
 					try { await Promise.all([records.afterSave(kind, submission.payload), ...(submission.refreshMetrics ? [render(token, version)] : [])]); }
 					catch (error) {
 						if (version !== sessionVersion) return;
 						const view = kind === 'partner' || kind === 'product' ? 'Seznam' : kind === 'lead' ? 'Seznam nebo přehled' : 'Přehled';
-						message(output, `${submission.successMessage} ${view} se nepodařilo obnovit. Záznam znovu neodesílejte; obnovte stránku.`, 'warning');
+						message(output, `${savedMessage} ${view} se nepodařilo obnovit. Záznam znovu neodesílejte; obnovte stránku.`, 'warning');
 						invalidateSession(error);
 						if (error instanceof AdminRequestError && [401, 403].includes(error.status)) {
-							message(msg, `${submission.successMessage} ${error.message} Záznam znovu neodesílejte.`, 'warning');
+							message(msg, `${savedMessage} ${error.message} Záznam znovu neodesílejte.`, 'warning');
 						}
 					}
 				}

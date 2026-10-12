@@ -1,13 +1,10 @@
 import { categoryLabels, leadStatusLabels, partnerRecord, productRecord, leadRecord } from '../../../src/lib/admin/record-model.ts';
 
-interface Statement { bind(...values: unknown[]): Statement; first<T>(): Promise<T | null>; all<T>(): Promise<{ results: T[] }>; }
-interface Env { DB?: { prepare(sql: string): Statement }; ADMIN_TOKEN?: string; }
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
+import { AdminError, json, leadId, slug, withAdmin } from '../../../src/lib/admin/server.ts';
+import type { AdminContext } from '../../../src/lib/admin/server.ts';
 
-export const onRequestGet = async ({ request, env }: { request: Request; env: Env }) => {
-	if (!env.ADMIN_TOKEN || !env.DB) return json({ error: 'Admin není nakonfigurován.' }, 503);
-	if (request.headers.get('authorization') !== `Bearer ${env.ADMIN_TOKEN}`) return json({ error: 'Neautorizováno.' }, 401);
-	const params = new URL(request.url).searchParams;
+export const onRequestGet = (context: AdminContext) => withAdmin(context, async db => {
+	const params = new URL(context.request.url).searchParams;
 	const type = params.get('type');
 	if (!['partners', 'products', 'leads'].includes(type || '')) return json({ error: 'Neznámý seznam.' }, 400);
 	const page = Number(params.get('page') ?? 1); const limit = Number(params.get('limit') ?? 25);
@@ -18,13 +15,16 @@ export const onRequestGet = async ({ request, env }: { request: Request; env: En
 		return json({ error: 'Zkontrolujte hledání, filtry a číslo stránky.' }, 422);
 	}
 	const isPartner = type === 'partners'; const isProduct = type === 'products';
+	if (partnerId) slug(partnerId, 'Partner ID');
+	if ((isPartner && partnerId) || ((isPartner || isProduct) && status) || (!isPartner && !isProduct && (category || active))) throw new AdminError('Vyberte filtry odpovídající tomuto seznamu.');
 	const from = isPartner ? 'monetization_partners r' : isProduct ? 'monetization_products r left join monetization_partners pa on pa.id=r.partner_id' : 'monetization_leads r left join monetization_partners pa on pa.id=r.partner_id';
 	const fields = isPartner ? 'r.*' : isProduct ? 'r.*, pa.display_name as partner_name, pa.active as partner_active' : 'r.*, pa.display_name as partner_name';
 	const map = isPartner ? partnerRecord : isProduct ? productRecord : leadRecord;
 	const id = params.get('id');
 	if (id !== null) {
+		if (isPartner || isProduct) slug(id, 'ID', isProduct ? 60 : 40); else leadId(id);
 		if (isProduct && !partnerId) return json({ error: 'Vyberte partnera produktu.' }, 422);
-		const row = await env.DB.prepare(`select ${fields} from ${from} where r.id=?${isProduct ? ' and r.partner_id=?' : ''}`)
+		const row = await db.prepare(`select ${fields} from ${from} where r.id=?${isProduct ? ' and r.partner_id=?' : ''}`)
 			.bind(...(isProduct ? [id, partnerId] : [id])).first<Record<string, unknown>>();
 		return row ? json({ item: map(row) }) : json({ error: 'Záznam nebyl nalezen. Obnovte seznam.' }, 404);
 	}
@@ -43,8 +43,8 @@ export const onRequestGet = async ({ request, env }: { request: Request; env: En
 	const filter = where.length ? ` where ${where.join(' and ')}` : '';
 	const order = isPartner ? 'r.display_name collate nocase, r.id' : isProduct ? 'r.product_name collate nocase, r.partner_id, r.id' : 'r.created_at desc, r.id';
 	const [count, rows] = await Promise.all([
-		env.DB.prepare(`select count(*) as total from ${from}${filter}`).bind(...values).first<{ total: number }>(),
-		env.DB.prepare(`select ${fields} from ${from}${filter} order by ${order} limit ? offset ?`).bind(...values, limit, (page - 1) * limit).all<Record<string, unknown>>(),
+		db.prepare(`select count(*) as total from ${from}${filter}`).bind(...values).first<{ total: number }>(),
+		db.prepare(`select ${fields} from ${from}${filter} order by ${order} limit ? offset ?`).bind(...values, limit, (page - 1) * limit).all<Record<string, unknown>>(),
 	]);
 	return json({ items: rows.results.map(map), total: count?.total ?? 0, page, limit });
-};
+});

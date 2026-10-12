@@ -136,7 +136,7 @@ test('lead lists search company/contact data and details contain the stored enqu
 	assert.equal(page.total, 1); assert.equal(page.items[0].id, leadId);
 	const detail = await (await get(env, `type=leads&id=${leadId}`)).json();
 	assert.equal(detail.item.company, 'Firma pro poptávku'); assert.equal(detail.item.interest, 'Reklama'); assert.equal(detail.item.email, 'test@example.com'); assert.equal(detail.item.payout, 150.5); assert.equal(detail.item.details.other, '<script>unsafe</script>');
-	assert.equal((await get(env, 'type=leads&id=missing')).status, 404);
+	assert.equal((await get(env, 'type=leads&id=33333333-3333-4333-8333-333333333333')).status, 404);
 	assert.equal((await get(env, 'type=leads&status=constructor')).status, 422);
 });
 

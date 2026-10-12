@@ -17,6 +17,11 @@ pnpm-debug.log*
 .env
 .env.production
 
+# Local D1 maintenance settings, backups and Wrangler state
+wrangler-a3.local.jsonc
+database/backups/
+.wrangler/
+
 # macOS-specific files
 .DS_Store
 
